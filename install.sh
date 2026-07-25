@@ -351,12 +351,16 @@ cat <<'EOF'
 EOF
 
 echo
-echo "This script has installed the HamVoIP GUI and its dependencies (already running via systemd). If you installed SkywarnPlus, finish its setup on the node's Automation tab."
-
+echo "This script has installed the HamVoIP GUI and its dependencies (already running via systemd)."
+echo "If you installed SkywarnPlus, finish its setup on the node's SkywarnPlus tab."
+echo
+echo
 if [ ! -d "$SKYWARN_DIR" ]; then
-    echo
     echo "You can re-run this script later to install SkywarnPlus."
 fi
 echo "You can re-run this script at any time to update the application to the latest version from git."
 echo
 echo "Visit http://<node-ip>:8088 in a browser to access the GUI."
+echo
+echo
+echo
