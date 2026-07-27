@@ -171,7 +171,7 @@
 {{$last := .SA818Last}}
 <div class="card">
   <div class="label-row">
-    <h2 style="margin:0">Shari Pi Settings</h2>
+    <h2 style="margin:0">Radio module (SA818/DRA818)</h2>
     {{template "help" "Programs the SHARI USB's SA818/DRA818 radio module directly over its serial connection, using the 818-prog tool. This is write-only — the module has no way to report back its currently-programmed values, so there's nothing to \"read\" from the hardware itself. What's shown below is only a record of the last settings this page sent, and whether the module accepted them."}}
   </div>
   <p class="section-intro">Runs <code>{{.SA818Tool}}</code> with these values, the same as answering its prompts by hand. If it's not installed or not on the PATH, this will fail with a clear error.</p>

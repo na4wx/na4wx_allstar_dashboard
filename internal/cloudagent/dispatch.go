@@ -24,6 +24,7 @@ func (a *Agent) actions() map[string]actionFunc {
 		"system.restartAsterisk": a.actionSystemRestartAsterisk,
 		"system.reboot":          a.actionSystemReboot,
 		"system.dtmf":            a.actionSystemDTMF,
+		"system.nodeStats":       a.actionSystemNodeStats,
 
 		"config.listNodes":               a.actionConfigListNodes,
 		"config.loadNode":                a.actionConfigLoadNode,
@@ -38,6 +39,13 @@ func (a *Agent) actions() map[string]actionFunc {
 		"config.cloneNodeConfig":         a.actionConfigCloneNodeConfig,
 		"config.applyStandardCommandSet": a.actionConfigApplyStandardCommandSet,
 		"config.normalizeNodeConfig":     a.actionConfigNormalizeNodeConfig,
+		"config.recreateNodeDevice":      a.actionConfigRecreateNodeDevice,
+		"config.syncExtensions":          a.actionConfigSyncExtensions,
+
+		"config.listRadioDevices":  a.actionConfigListRadioDevices,
+		"config.loadRadioDevice":   a.actionConfigLoadRadioDevice,
+		"config.saveRadioDevice":   a.actionConfigSaveRadioDevice,
+		"config.deleteRadioDevice": a.actionConfigDeleteRadioDevice,
 
 		"soundSchedule.list":   a.actionSoundScheduleList,
 		"soundSchedule.save":   a.actionSoundScheduleSave,

@@ -7,12 +7,16 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>NA4WX Allstar Dashboard</title>
+  <link rel="icon" type="image/png" href="/static/img/icon.png">
   <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
   {{if .LoggedIn}}
   <header class="topbar">
-    <span class="brand">NA4WX Allstar Dashboard</span>
+    <a href="/" class="brand">
+      <img src="/static/img/icon.png" alt="" class="brand-mark">
+      NA4WX Allstar Dashboard
+    </a>
     <button type="button" class="nav-toggle" data-nav-toggle aria-label="Menu" aria-expanded="false">
       <span></span><span></span><span></span>
     </button>

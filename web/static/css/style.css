@@ -79,9 +79,14 @@ header.topbar {
 }
 
 header.topbar .brand {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
   font-weight: 650;
   letter-spacing: -0.015em;
   font-size: 1.02rem;
+  text-decoration: none;
+  color: var(--text);
   /* Truncates on a narrow screen instead of wrapping across multiple
      lines — flex-shrink:1 plus min-width:0 is what lets a flex child
      shrink below its content's natural width at all, which is required
@@ -91,6 +96,14 @@ header.topbar .brand {
   text-overflow: ellipsis;
   min-width: 0;
   flex-shrink: 1;
+}
+
+header.topbar .brand-mark {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  display: block;
+  flex-shrink: 0;
 }
 
 header.topbar nav {

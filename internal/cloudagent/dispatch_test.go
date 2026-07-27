@@ -26,6 +26,7 @@ func TestActionsRegistryIsFixedAllowlist(t *testing.T) {
 		"system.restartAsterisk": true,
 		"system.reboot":          true,
 		"system.dtmf":            true,
+		"system.nodeStats":       true,
 
 		"config.listNodes":               true,
 		"config.loadNode":                true,
@@ -40,6 +41,13 @@ func TestActionsRegistryIsFixedAllowlist(t *testing.T) {
 		"config.cloneNodeConfig":         true,
 		"config.applyStandardCommandSet": true,
 		"config.normalizeNodeConfig":     true,
+		"config.recreateNodeDevice":      true,
+		"config.syncExtensions":          true,
+
+		"config.listRadioDevices":  true,
+		"config.loadRadioDevice":   true,
+		"config.saveRadioDevice":   true,
+		"config.deleteRadioDevice": true,
 
 		"soundSchedule.list":   true,
 		"soundSchedule.save":   true,

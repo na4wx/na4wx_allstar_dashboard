@@ -15,32 +15,36 @@ const (
 // RadioDevice is one USB sound-fob stanza: audio levels, carrier/CTCSS
 // detection source, and PTT polarity. Field names match app_rpt's
 // documented usbradio.conf/simpleusb.conf keys directly.
+// JSON tags exist only for internal/cloudagent's relayed
+// config.*RadioDevice actions (see that package's actions_radio.go);
+// they have no effect on this struct's existing Go-field-name access
+// elsewhere.
 type RadioDevice struct {
-	Name string // stanza name, e.g. "usb"; matches the device half of rpt.conf's rxchannel (USBRADIO/<name>)
+	Name string `json:"name"` // stanza name, e.g. "usb"; matches the device half of rpt.conf's rxchannel (USBRADIO/<name>)
 
-	CarrierFrom    string // dsp | usb | usbinvert | vox | no
-	CTCSSFrom      string // dsp | usb | usbinvert | no
-	RXDemod        string // speaker | flat
-	TXPrelim       string // yes | no
-	TXMixA         string // voice | composite | ...
-	TXMixB         string // no | ...
-	InvertPTT      string // 0 | 1
-	TXCTCSSDefault string // tone frequency, e.g. "100.0"
-	RXMixerSet     string // 0-999 receive volume
-	TXMixerSet     string // 0-999 transmit volume
-	RXBoost        string // 0 | 1 — confirmed present on a real simpleusb.conf, not usbradio-only as once assumed here
+	CarrierFrom    string `json:"carrierFrom"`    // dsp | usb | usbinvert | vox | no
+	CTCSSFrom      string `json:"ctcssFrom"`      // dsp | usb | usbinvert | no
+	RXDemod        string `json:"rxDemod"`        // speaker | flat
+	TXPrelim       string `json:"txPrelim"`       // yes | no
+	TXMixA         string `json:"txMixA"`         // voice | composite | ...
+	TXMixB         string `json:"txMixB"`         // no | ...
+	InvertPTT      string `json:"invertPTT"`      // 0 | 1
+	TXCTCSSDefault string `json:"txCTCSSDefault"` // tone frequency, e.g. "100.0"
+	RXMixerSet     string `json:"rxMixerSet"`     // 0-999 receive volume
+	TXMixerSet     string `json:"txMixerSet"`     // 0-999 transmit volume
+	RXBoost        string `json:"rxBoost"`        // 0 | 1 — confirmed present on a real simpleusb.conf, not usbradio-only as once assumed here
 
 	// PreEmphasis/DeEmphasis/PLFilter key names are inferred from the
 	// simpleusb-tune-menu tool's on-screen labels ("PRE-emphasis",
 	// "DE-emphasis", "PLfilter") rather than directly confirmed on a
 	// live node the way the other fields were — correct if wrong.
-	PreEmphasis string // 0 | 1
-	DeEmphasis  string // 0 | 1
-	PLFilter    string // 0 | 1
+	PreEmphasis string `json:"preEmphasis"` // 0 | 1
+	DeEmphasis  string `json:"deEmphasis"`  // 0 | 1
+	PLFilter    string `json:"plFilter"`    // 0 | 1
 
 	// usbradio.conf only (chan_usbradio, not chan_simpleusb).
-	HdwType string // 0 | 1
-	Duplex3 string // 0 | 1
+	HdwType string `json:"hdwType"` // 0 | 1
+	Duplex3 string `json:"duplex3"` // 0 | 1
 }
 
 var radioDeviceFields = []struct {

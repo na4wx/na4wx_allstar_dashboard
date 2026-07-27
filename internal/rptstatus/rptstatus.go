@@ -104,10 +104,12 @@ func ParseLstats(out string) (headers []string, rows [][]string, ok bool) {
 	return headers, rows, true
 }
 
-// StatField is one "Label.........: Value" line from "rpt stats".
+// StatField is one "Label.........: Value" line from "rpt stats". JSON
+// tags exist only for internal/cloudagent's relayed system.nodeStats
+// action.
 type StatField struct {
-	Label string
-	Value string
+	Label string `json:"label"`
+	Value string `json:"value"`
 }
 
 // StatFields wraps the parsed block so a value can be looked up by label
