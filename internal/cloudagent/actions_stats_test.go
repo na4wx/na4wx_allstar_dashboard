@@ -37,9 +37,25 @@ exit 0
 	return path
 }
 
+// statsTestNodeStore returns a config.Store with node "546051"
+// configured -- needed now that actionSystemNodeStats validates the
+// requested node against the store (see validNodeNumber's own doc
+// comment) before running any Asterisk CLI commands.
+func statsTestNodeStore(t *testing.T) *config.Store {
+	t.Helper()
+	asteriskDir := t.TempDir()
+	fixture := "[546051]\n" +
+		"rxchannel = SimpleUSB/usb\n" +
+		"duplex = 1\n"
+	if err := os.WriteFile(filepath.Join(asteriskDir, config.RptConfFile), []byte(fixture), 0644); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+	return config.NewStore(asteriskDir)
+}
+
 func TestActionSystemNodeStats(t *testing.T) {
 	bin := fakeStatsAsterisk(t)
-	a := newTestAgent(t, filepath.Join(t.TempDir(), "settings.json"), config.NewStore(t.TempDir()), bin)
+	a := newTestAgent(t, filepath.Join(t.TempDir(), "settings.json"), statsTestNodeStore(t), bin)
 
 	params, _ := json.Marshal(nodeStatsParams{Number: "546051"})
 	result, err := a.dispatch(context.Background(), "system.nodeStats", params)
@@ -55,5 +71,18 @@ func TestActionSystemNodeStats(t *testing.T) {
 	}
 	if len(res.Stats) != 2 || res.Stats[0].Label != "Signal on input" || res.Stats[0].Value != "YES" {
 		t.Errorf("res.Stats = %+v, want the fixture's two fields", res.Stats)
+	}
+}
+
+// TestActionSystemNodeStatsRejectsUnknownNode confirms the node
+// validation actually blocks an unconfigured node before any Asterisk
+// CLI command is built from it.
+func TestActionSystemNodeStatsRejectsUnknownNode(t *testing.T) {
+	bin := fakeStatsAsterisk(t)
+	a := newTestAgent(t, filepath.Join(t.TempDir(), "settings.json"), statsTestNodeStore(t), bin)
+
+	params, _ := json.Marshal(nodeStatsParams{Number: "999999"})
+	if _, err := a.dispatch(context.Background(), "system.nodeStats", params); err == nil {
+		t.Fatal("dispatch error = nil, want rejection of a node that isn't configured on this device")
 	}
 }

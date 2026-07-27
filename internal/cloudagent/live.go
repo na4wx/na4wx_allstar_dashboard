@@ -35,6 +35,24 @@ type liveNodeState struct {
 	Connected     []rptstatus.ConnectedNode `json:"connected"`
 }
 
+// validNodeNumber reports whether number is safe to interpolate into
+// an Asterisk CLI command string built by plain string concatenation
+// (every AsteriskRX caller in this package does exactly that, with no
+// shell involved but also no escaping) -- true only if it's an
+// existing, digits-only rpt.conf node section. A crafted value (stray
+// whitespace, control characters, anything non-numeric) can never
+// match a real section, since sections are only ever created via
+// config.Store.SaveNode's own digits-only validation, so this doubles
+// as the "does this node even exist" check every other node-scoped
+// action (actionConfigLoadNode and friends) already gets for free by
+// routing through LoadNode -- these three call sites (here, dtmf,
+// stats) build raw CLI strings directly instead, so they need the same
+// check made explicit.
+func (a *Agent) validNodeNumber(number string) bool {
+	_, err := a.store.LoadNode(number)
+	return err == nil
+}
+
 // snapshotLiveNode reads a node's live state in one pass — the
 // cloudagent counterpart to internal/server/live.go's snapshotNode,
 // minus the link-history recording (this package has no local history
@@ -50,6 +68,9 @@ func (a *Agent) snapshotLiveNode(ctx context.Context, number string) liveNodeSta
 	// with nothing currently connected is an extremely common, everyday
 	// state, not an edge case, so this must never come across as null.
 	live := liveNodeState{Connected: []rptstatus.ConnectedNode{}}
+	if !a.validNodeNumber(number) {
+		return live
+	}
 	if out, err := system.AsteriskRX(ctx, a.asteriskBin, "rpt stats "+number); err == nil {
 		fields, _ := rptstatus.ParseRptStats(out)
 		live.Receiving = rptstatus.NodeReceiving(fields)
@@ -95,7 +116,7 @@ func newLiveWatches() *liveWatches {
 // watch starts polling node if it isn't already being watched on this
 // connection.
 func (lw *liveWatches) watch(ctx context.Context, a *Agent, conn *websocket.Conn, node string) {
-	if node == "" {
+	if node == "" || !a.validNodeNumber(node) {
 		return
 	}
 	lw.mu.Lock()

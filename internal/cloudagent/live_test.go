@@ -3,6 +3,8 @@ package cloudagent
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +15,23 @@ import (
 	"hamvoipconfiggui/internal/config"
 )
 
+// liveTestNodeStore returns a config.Store with node "2000" configured.
+// Every agent in this file needs this now that watch()/snapshotLiveNode
+// validate the requested node against the store (see validNodeNumber's
+// own doc comment) -- an empty store made every one of these node
+// references look "unknown" and silently no-op.
+func liveTestNodeStore(t *testing.T) *config.Store {
+	t.Helper()
+	asteriskDir := t.TempDir()
+	fixture := "[2000]\n" +
+		"rxchannel = SimpleUSB/usb\n" +
+		"duplex = 1\n"
+	if err := os.WriteFile(filepath.Join(asteriskDir, config.RptConfFile), []byte(fixture), 0644); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+	return config.NewStore(asteriskDir)
+}
+
 // TestSnapshotLiveNodeConnectedNeverMarshalsToNull covers a real crash:
 // a nil Go slice marshals to JSON null, and the cloud client's
 // live.connected.length crashed the browser tab on exactly that --
@@ -20,7 +39,7 @@ import (
 // that same "no connections found" path) is an everyday state, not an
 // error, and must always come across the wire as [], never null.
 func TestSnapshotLiveNodeConnectedNeverMarshalsToNull(t *testing.T) {
-	a := newTestAgent(t, t.TempDir()+"/settings.json", config.NewStore(t.TempDir()), "does-not-exist-asterisk-binary")
+	a := newTestAgent(t, t.TempDir()+"/settings.json", liveTestNodeStore(t), "does-not-exist-asterisk-binary")
 	live := a.snapshotLiveNode(context.Background(), "2000")
 
 	if live.Connected == nil {
@@ -69,7 +88,7 @@ func TestWatchStartsPushingLiveEvents(t *testing.T) {
 		}
 	})
 
-	a := newTestAgent(t, t.TempDir()+"/settings.json", config.NewStore(t.TempDir()), "does-not-exist-asterisk-binary")
+	a := newTestAgent(t, t.TempDir()+"/settings.json", liveTestNodeStore(t), "does-not-exist-asterisk-binary")
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	go a.runOnce(ctx, Settings{CloudURL: url, APIKey: "test-key", Enabled: true})
@@ -122,7 +141,7 @@ func TestUnwatchStopsPushingLiveEvents(t *testing.T) {
 		}
 	})
 
-	a := newTestAgent(t, t.TempDir()+"/settings.json", config.NewStore(t.TempDir()), "does-not-exist-asterisk-binary")
+	a := newTestAgent(t, t.TempDir()+"/settings.json", liveTestNodeStore(t), "does-not-exist-asterisk-binary")
 	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
 	defer cancel()
 	go a.runOnce(ctx, Settings{CloudURL: url, APIKey: "test-key", Enabled: true})
@@ -157,7 +176,7 @@ drain:
 // event rate).
 func TestWatchIsIdempotent(t *testing.T) {
 	lw := newLiveWatches()
-	a := newTestAgent(t, t.TempDir()+"/settings.json", config.NewStore(t.TempDir()), "asterisk")
+	a := newTestAgent(t, t.TempDir()+"/settings.json", liveTestNodeStore(t), "asterisk")
 
 	url := startFakeCloud(t, func(ctx context.Context, conn *websocket.Conn) {
 		<-ctx.Done()

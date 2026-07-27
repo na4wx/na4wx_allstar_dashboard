@@ -34,6 +34,9 @@ func (a *Agent) actionSystemDTMF(ctx context.Context, params json.RawMessage) (a
 	if err := json.Unmarshal(params, &p); err != nil {
 		return nil, fmt.Errorf("bad params: %w", err)
 	}
+	if !a.validNodeNumber(p.Number) {
+		return nil, fmt.Errorf("node %s not found", p.Number)
+	}
 	digits := strings.TrimSpace(p.Digits)
 	if !dtmfDigitsRe.MatchString(digits) {
 		return nil, fmt.Errorf("digits must contain only 0-9, *, #, or A-D")

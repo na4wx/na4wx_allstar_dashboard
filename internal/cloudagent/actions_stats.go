@@ -43,6 +43,10 @@ func (a *Agent) actionSystemNodeStats(ctx context.Context, params json.RawMessag
 		return nil, fmt.Errorf("bad params: %w", err)
 	}
 
+	if !a.validNodeNumber(p.Number) {
+		return nil, fmt.Errorf("node %s not found", p.Number)
+	}
+
 	result := nodeStatsResult{Connected: []rptstatus.ConnectedNode{}}
 	statsOut, err := system.AsteriskRX(ctx, a.asteriskBin, "rpt stats "+p.Number)
 	if err != nil {
