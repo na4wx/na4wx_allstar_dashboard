@@ -105,6 +105,14 @@ type homePageData struct {
 	Nodes  []*config.Node
 	Status system.Status
 	Quick  []nodeQuickStatus
+
+	// OwnerSubscriptionActive mirrors cloudagent.Agent's own field of
+	// the same name -- only populated for home.html (see renderHome),
+	// which swaps its "manage from anywhere" promo card for a
+	// thank-you once this node's cloud account has an active paid
+	// subscription. Left at its false zero value for stats.html, which
+	// doesn't read it.
+	OwnerSubscriptionActive bool
 }
 
 // handleHome is the sole landing page: one card per configured node with
@@ -123,10 +131,11 @@ func (s *Server) renderHome(w http.ResponseWriter, r *http.Request, pd pageData)
 		return
 	}
 	s.render(w, "home.html", homePageData{
-		pageData: pd,
-		Nodes:    nodes,
-		Status:   status,
-		Quick:    quick,
+		pageData:                pd,
+		Nodes:                   nodes,
+		Status:                  status,
+		Quick:                   quick,
+		OwnerSubscriptionActive: s.cloudAgent.OwnerSubscriptionActive(),
 	})
 }
 

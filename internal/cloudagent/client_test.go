@@ -130,6 +130,47 @@ func TestRunOnceSetsLastConnected(t *testing.T) {
 	<-done
 }
 
+// TestRunOnceCapturesOwnerSubscriptionActive confirms a helloAck's
+// ownerSubscriptionActive flag is captured onto the Agent, readable via
+// OwnerSubscriptionActive() -- the signal home.html uses to swap its
+// subscribe pitch for a thank-you.
+func TestRunOnceCapturesOwnerSubscriptionActive(t *testing.T) {
+	url := startFakeCloud(t, func(ctx context.Context, conn *websocket.Conn) {
+		var hello envelope
+		if err := wsjson.Read(ctx, conn, &hello); err != nil {
+			return
+		}
+		if err := wsjson.Write(ctx, conn, envelope{Type: typeHelloAck, OK: true, OwnerSubscriptionActive: true}); err != nil {
+			return
+		}
+		<-ctx.Done()
+	})
+
+	a := newTestAgent(t, t.TempDir()+"/settings.json", config.NewStore(t.TempDir()), "does-not-exist-asterisk-binary")
+	if a.OwnerSubscriptionActive() {
+		t.Fatal("OwnerSubscriptionActive() is true before any connection attempt")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	done := make(chan bool, 1)
+	go func() {
+		done <- a.runOnce(ctx, Settings{CloudURL: url, APIKey: "test-key", Enabled: true})
+	}()
+
+	deadline := time.After(2 * time.Second)
+	for !a.OwnerSubscriptionActive() {
+		select {
+		case <-deadline:
+			t.Fatal("OwnerSubscriptionActive() still false after a helloAck with ownerSubscriptionActive=true")
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+
+	cancel()
+	<-done
+}
+
 // TestRunOnceRejectedHelloReturnsFalse confirms a rejected API key
 // reports helloSucceeded=false, which is what Run uses to keep backing
 // off instead of resetting to the initial 1s delay.

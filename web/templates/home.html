@@ -85,6 +85,17 @@
 </div>
 {{end}}
 
+{{if .OwnerSubscriptionActive}}
+<div class="card" style="background:var(--accent-soft); border-color:var(--accent)">
+  <div class="label-row">
+    <h2 style="margin:0">Thanks for subscribing!</h2>
+  </div>
+  <p class="section-intro" style="margin-top:0">
+    Your <a href="https://allstar.na4wx.com" target="_blank" rel="noopener">NA4WX Allstar Cloud</a> subscription is
+    active — manage this node from anywhere, no VPN or port forwarding required.
+  </p>
+</div>
+{{else}}
 <div class="card" style="background:var(--accent-soft); border-color:var(--accent)">
   <div class="label-row">
     <h2 style="margin:0">Manage this node from anywhere</h2>
@@ -102,5 +113,16 @@
     <a class="btn primary" href="https://allstar.na4wx.com" target="_blank" rel="noopener">Learn more at NA4WX Allstar Cloud</a>
   </div>
 </div>
+{{end}}
+
+{{if not .OwnerSubscriptionActive}}
+<div class="card" style="text-align:center">
+  <p class="hint" style="margin:0">
+    Enjoying this dashboard? It's free and always will be —
+    <a href="https://donate.stripe.com/test_eVq8wR8c498Yf4W3CQ9k400" target="_blank" rel="noopener">buy me a coffee</a>
+    if you'd like to help support development.
+  </p>
+</div>
+{{end}}
 {{end}}
 {{template "layout" .}}

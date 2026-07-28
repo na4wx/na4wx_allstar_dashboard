@@ -92,6 +92,14 @@ type Agent struct {
 	reload        chan struct{}
 	activeConn    *websocket.Conn // set only while runOnce holds an open connection
 	lastConnected time.Time       // zero until the first successful helloAck
+
+	// ownerSubscriptionActive mirrors envelope.OwnerSubscriptionActive
+	// from the most recent successful helloAck this process lifetime --
+	// false if this process has never connected. Same "last known, not
+	// live" semantics as lastConnected above: it isn't reset back to
+	// false when Cloud Sync is disabled or the connection drops, only
+	// ever updated on the next successful helloAck.
+	ownerSubscriptionActive bool
 }
 
 // New builds an Agent. settingsPath is where the operator's API key
@@ -145,6 +153,19 @@ func (a *Agent) LastConnected() time.Time {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.lastConnected
+}
+
+// OwnerSubscriptionActive reports whether, as of the most recent
+// successful helloAck this process lifetime, this device's owner had a
+// genuine active paid cloud subscription -- false if this process has
+// never connected. See envelope.OwnerSubscriptionActive's own doc
+// comment for exactly what "active" means. Exposed for the home page's
+// promo card to swap its subscribe pitch for a thank-you once the
+// operator has actually paid.
+func (a *Agent) OwnerSubscriptionActive() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.ownerSubscriptionActive
 }
 
 // Settings exposes the settings store so internal/server's Cloud Sync

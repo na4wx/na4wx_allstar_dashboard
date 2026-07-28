@@ -26,6 +26,17 @@ type envelope struct {
 	OK    bool   `json:"ok,omitempty"`
 	Error string `json:"error,omitempty"`
 
+	// OwnerSubscriptionActive (cloud -> node, helloAck only): whether
+	// this device's owner currently has a genuine active paid
+	// subscription on the cloud side -- narrower than "entitled" (which
+	// also covers an active free trial or a comped account; see the
+	// cloud repo's server/src/services/entitlement.ts hasActiveSubscription
+	// doc comment for exactly why the distinction matters here). Always
+	// false when the cloud deployment has billing switched off. Read by
+	// the local dashboard's home page to swap its "subscribe" pitch for
+	// a thank-you once the operator has actually started paying.
+	OwnerSubscriptionActive bool `json:"ownerSubscriptionActive,omitempty"`
+
 	// call (cloud -> node) / result (node -> cloud): a relayed action
 	// invocation and its correlated reply. ID ties a result back to the
 	// call that produced it.
