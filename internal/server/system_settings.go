@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"net/http"
 	"net/url"
 	"slices"
@@ -10,6 +11,7 @@ import (
 	"hamvoipconfiggui/internal/netconfig"
 	"hamvoipconfiggui/internal/sa818"
 	"hamvoipconfiggui/internal/system"
+	"hamvoipconfiggui/internal/wifi"
 )
 
 // These are standard paths on a stock Raspberry Pi OS image. They're
@@ -59,6 +61,18 @@ type systemPageData struct {
 	// that check killed startup on a node that only uses SimpleUSB and
 	// never references USBRADIO at all.
 	EmptyRadioFiles []string
+
+	// Wireless: wlan0 scan/connect and the automatic hotspot fallback —
+	// see internal/wifi's package doc and populateSystemWiFi.
+	// WiFiNetworks is nil except right on the response to a scan
+	// (ephemeral — never persisted, unlike everything else on this
+	// page).
+	WiFiAvailable   bool
+	WiFiBackendName string
+	WiFiStatus      wifi.Status
+	WiFiStatusError string
+	WiFiNetworks    []wifi.Network
+	WiFiHotspotSSID string
 }
 
 func (s *Server) handleSystemPage(w http.ResponseWriter, r *http.Request) {
@@ -66,6 +80,15 @@ func (s *Server) handleSystemPage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) renderSystemPage(w http.ResponseWriter, r *http.Request, pd pageData) {
+	s.renderSystemPageWithNetworks(w, r, pd, nil)
+}
+
+// renderSystemPageWithNetworks is renderSystemPage's full body — split
+// out so handleSystemWiFiScan can inject freshly scanned results into
+// one specific render without a new persistence layer for what's
+// inherently ephemeral data (see systemPageData.WiFiNetworks's own
+// doc comment). networks is nil for every other caller.
+func (s *Server) renderSystemPageWithNetworks(w http.ResponseWriter, r *http.Request, pd pageData, networks []wifi.Network) {
 	ctx := r.Context()
 
 	hostname, _ := system.Hostname(ctx)
@@ -122,8 +145,33 @@ func (s *Server) renderSystemPage(w http.ResponseWriter, r *http.Request, pd pag
 	data.CTCSSOptions = ctcssOptions()
 
 	s.populateSystemCloud(&data)
+	s.populateSystemWiFi(ctx, &data)
+	if networks != nil {
+		data.WiFiNetworks = networks
+	}
 
 	s.render(w, "system.html", data)
+}
+
+// populateSystemWiFi fills systemPageData's Wireless fields from
+// s.wifiManager. If no supported backend was detected (WiFiAvailable
+// false), it stops there — WiFiStatus stays its zero value, and the
+// template shows a plain "not available" line instead of the rest of
+// the card.
+func (s *Server) populateSystemWiFi(ctx context.Context, data *systemPageData) {
+	data.WiFiHotspotSSID = s.wifiManager.HotspotSSID()
+	backend := s.wifiManager.Backend()
+	data.WiFiBackendName = backend.Name()
+	data.WiFiAvailable = backend.Name() != "unavailable"
+	if !data.WiFiAvailable {
+		return
+	}
+	st, err := backend.Status(ctx)
+	if err != nil {
+		data.WiFiStatusError = err.Error()
+		return
+	}
+	data.WiFiStatus = st
 }
 
 func (s *Server) handleSystemHostname(w http.ResponseWriter, r *http.Request) {

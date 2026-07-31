@@ -55,7 +55,11 @@ Instead of SkywarnPlus's own courtesy-tone swap, this app offers its own safer a
 
 ### System
 
-Device name, static IP / DHCP, radio device management, SHARI USB audio preset, SA818/DRA818 module programming (frequency, CTCSS, squelch — over serial via `818-prog`), Asterisk restart and reboot, admin password, a log tail, and Cloud Sync settings.
+Device name, static IP / DHCP, wireless network scan/connect (with an automatic fallback WiFi hotspot if the node ever loses all network connectivity — see [Wireless](#wireless) below), radio device management, SHARI USB audio preset, SA818/DRA818 module programming (frequency, CTCSS, squelch — over serial via `818-prog`), Asterisk restart and reboot, admin password, a log tail, and Cloud Sync settings.
+
+### Wireless
+
+Scans for nearby WiFi networks and connects `wlan0` to one, over either network stack a HamVoIP image might be running — NetworkManager (`nmcli`) or dhcpcd+wpa_supplicant (`wpa_cli`), auto-detected at startup; the System page just says WiFi management isn't available if neither is present. If this node ever has no active network connection at all (neither Ethernet nor WiFi), it automatically starts broadcasting its own fallback hotspot — default SSID `hamvoip-gui-setup`, password `hamradio2m` (override both with `-wifi-hotspot-ssid`/`-wifi-hotspot-password`, see [Command-line flags](#command-line-flags) below) — so you can always get back in from a phone or laptop and pick a real network, without a console cable. Set `-wifi-hotspot-enabled=false` to disable this entirely on hardware with no WiFi radio.
 
 ### Cloud Sync (optional)
 
@@ -121,6 +125,7 @@ Visit `http://<pi-ip>:8088/setup` to create the admin account — there is no de
 - The service runs as root (it edits root-owned config files and calls `systemctl`/`asterisk -rx`/`reboot`), so the admin account is the only thing standing between the network and full control of the node. Use a real password, and don't expose port 8088 to the open internet — put it behind a VPN, WireGuard, or at minimum a firewall rule restricting it to your LAN.
 - There's no built-in TLS. If you need HTTPS, put a reverse proxy (Caddy, nginx) in front of it.
 - Static IP changes are written to `dhcpcd.conf` but never auto-applied — they take effect on next reboot, specifically so a typo can't lock you out of the node mid-session.
+- The fallback WiFi hotspot's password (default `hamradio2m`, see [Wireless](#wireless) above) is fixed and documented rather than randomly generated per install, so anyone within radio range who knows it can join that hotspot network — they'd still need this app's own admin login to do anything from there. Change it with `-wifi-hotspot-password` if that's not an acceptable tradeoff for your deployment.
 
 ## Command-line flags
 
@@ -156,6 +161,13 @@ Visit `http://<pi-ip>:8088/setup` to create the admin account — there is no de
                    Weather alerts via SkywarnPlus (default "/usr/local/bin/SkywarnPlus")
 -wx-tones-file     where the SkywarnPlus tab's alert-driven WX courtesy-tone mappings are
                    stored (default "/etc/hamvoip-gui/wx-tones.json")
+-wifi-hotspot-ssid     SSID for the automatic fallback WiFi hotspot — see Wireless above
+                       (default "hamvoip-gui-setup")
+-wifi-hotspot-password password for the automatic fallback WiFi hotspot, WPA2, 8-63 characters
+                       (default "hamradio2m")
+-wifi-hotspot-enabled  automatically stand up the fallback hotspot when this node has no active
+                       network connection; set false to disable entirely, e.g. no WiFi hardware
+                       (default true)
 ```
 
 All Asterisk control (the running/stopped indicator, the System page's restart button, and each node's live status and DTMF relay) goes through Asterisk's own CLI (`<bin> -rx "..."`) rather than `systemctl` — Asterisk is frequently supervised some other way (e.g. HamVoIP runs it under a `safe_asterisk` watchdog script, not a native systemd unit), so asking Asterisk itself is the only check that works regardless of how it's actually being run.

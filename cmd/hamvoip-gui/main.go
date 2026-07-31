@@ -17,6 +17,7 @@ import (
 	"hamvoipconfiggui/internal/config"
 	"hamvoipconfiggui/internal/nodedb"
 	"hamvoipconfiggui/internal/server"
+	"hamvoipconfiggui/internal/wifi"
 	"hamvoipconfiggui/web"
 )
 
@@ -42,7 +43,17 @@ func main() {
 	cloudSettingsPath := flag.String("cloud-settings-file", "/etc/hamvoip-gui/cloud-agent.json", "path to store this node's cloud API key/enabled flag for the optional public cloud platform connection (see internal/cloudagent's package doc) — off until the operator opts in on the Cloud Sync settings card")
 	cloudURL := flag.String("cloud-url", "wss://api-allstar.na4wx.com/agent", "the one WebSocket URL this node will ever dial for the optional public cloud platform connection (see internal/cloudagent's package doc); fixed at build/deploy time, shown read-only on the Cloud Sync settings card and never operator-editable there — override only for local development/testing against a different cloud instance")
 	cloudAuditLog := flag.String("cloud-audit-log", "/var/log/hamvoip-gui/cloud-actions.log", "path to record every action the cloud connection relays to this device, independent of the cloud site's own records — see internal/cloudagent's package doc")
+	wifiHotspotSSID := flag.String("wifi-hotspot-ssid", "hamvoip-gui-setup", "SSID this node broadcasts as a fallback WiFi hotspot on wlan0 the moment it has no active network connection (neither Ethernet nor WiFi) — join this from a phone/laptop to reach this page and pick a real network. See internal/wifi's package doc.")
+	wifiHotspotPassword := flag.String("wifi-hotspot-password", "hamradio2m", "the fixed password for the fallback WiFi hotspot above (WPA2, 8-63 characters) — documented here and in the README rather than randomly generated, so an operator who can physically reach a node that's fallen off the network can always get back in without a console cable")
+	wifiHotspotEnabled := flag.Bool("wifi-hotspot-enabled", true, "automatically stand up the fallback WiFi hotspot on wlan0 when this node has no active network connection; set false to disable the self-healing hotspot behavior entirely (e.g. a node with no wlan0 hardware at all)")
 	flag.Parse()
+
+	if err := wifi.ValidateSSID(*wifiHotspotSSID); err != nil {
+		log.Fatalf("-wifi-hotspot-ssid: %v", err)
+	}
+	if err := wifi.ValidatePSK(*wifiHotspotPassword); err != nil {
+		log.Fatalf("-wifi-hotspot-password: %v", err)
+	}
 
 	templatesFS, err := fs.Sub(web.Templates, "templates")
 	if err != nil {
@@ -66,7 +77,7 @@ func main() {
 
 	store := config.NewStore(*asteriskEtc)
 
-	srv, err := server.New(store, authMgr, templatesFS, staticFS, *asteriskBin, *asteriskLog, *sa818Tool, *sa818StatePath, *nodeDBPath, *nodeDBURL, *soundsCustomDir, *soundsStockDir, *soxTool, *soundSchedulePath, *ttsTool, *ttsVoicesDir, *skywarnDir, *wxTonesPath, *cloudSettingsPath, *cloudURL, *cloudAuditLog)
+	srv, err := server.New(store, authMgr, templatesFS, staticFS, *asteriskBin, *asteriskLog, *sa818Tool, *sa818StatePath, *nodeDBPath, *nodeDBURL, *soundsCustomDir, *soundsStockDir, *soxTool, *soundSchedulePath, *ttsTool, *ttsVoicesDir, *skywarnDir, *wxTonesPath, *cloudSettingsPath, *cloudURL, *cloudAuditLog, *wifiHotspotSSID, *wifiHotspotPassword, *wifiHotspotEnabled)
 	if err != nil {
 		log.Fatalf("server: %v", err)
 	}
@@ -95,6 +106,13 @@ func main() {
 	// until the operator opts in on the Cloud Sync settings card; same
 	// reasoning as StartLinkHistoryPoller for starting it here.
 	srv.StartCloudAgent(context.Background())
+
+	// Auto-detects which network stack is present, then watches for "no
+	// active connection at all" (neither Ethernet nor WiFi) and stands
+	// up a fallback WiFi hotspot on wlan0 until the operator picks a
+	// real network from this page — see internal/wifi's package doc.
+	// Same reasoning as StartLinkHistoryPoller for starting it here.
+	srv.StartWiFiWatchdog(context.Background())
 
 	// Node directory: read whatever copy is on disk, and (unless
 	// disabled) keep it current. A download failure is logged and

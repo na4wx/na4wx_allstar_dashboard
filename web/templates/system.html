@@ -97,6 +97,57 @@
   </form>
 </div>
 
+<div class="card">
+  <div class="label-row">
+    <h2 style="margin:0">Wireless</h2>
+    {{template "help" "Scan for and connect this device to a WiFi network. If this device ever loses all network connectivity — neither Ethernet nor WiFi — it automatically starts broadcasting its own fallback WiFi hotspot so you can always get back in: join that hotspot from a phone or laptop and come back to this page to pick a real network."}}
+  </div>
+  {{if not .WiFiAvailable}}
+  <p class="hint">WiFi management isn't available on this system (no NetworkManager or wpa_supplicant/dhcpcd detected).</p>
+  {{else}}
+  {{if .WiFiStatusError}}<p class="hint">Could not read WiFi status: {{.WiFiStatusError}}</p>{{end}}
+  <div class="label-row" style="margin-top:0.5rem">
+    {{if eq .WiFiStatus.Mode "hotspot"}}
+    <span class="status-pill down"><span class="dot"></span>Broadcasting fallback hotspot as "{{.WiFiStatus.SSID}}"</span>
+    {{else if eq .WiFiStatus.Mode "client"}}
+    <span class="status-pill up"><span class="dot"></span>Connected to "{{.WiFiStatus.SSID}}"{{if .WiFiStatus.IPAddress}} ({{.WiFiStatus.IPAddress}}){{end}}</span>
+    {{else}}
+    <span class="status-pill down"><span class="dot"></span>Not connected</span>
+    {{end}}
+    <span class="hint">via {{.WiFiBackendName}}</span>
+  </div>
+  <p class="hint">If this node loses all network connectivity, it automatically becomes a WiFi hotspot named "{{.WiFiHotspotSSID}}" — join it from a phone or laptop to reach this page and pick a real network.</p>
+
+  <form method="post" action="/system/wifi/scan" style="margin-top:0.75rem">
+    <div class="actions" style="margin-top:0">
+      <button type="submit" class="btn">Scan for networks</button>
+    </div>
+  </form>
+
+  {{if .WiFiNetworks}}
+  <table style="margin-top:0.75rem">
+    <thead><tr><th>Network</th><th>Signal</th><th>Security</th><th></th></tr></thead>
+    <tbody>
+      {{range .WiFiNetworks}}
+      <tr>
+        <td>{{.SSID}}</td>
+        <td>{{.Signal}}%</td>
+        <td>{{.Security}}</td>
+        <td>
+          <form method="post" action="/system/wifi/connect" style="display:flex; gap:0.5rem; align-items:center">
+            <input type="hidden" name="ssid" value="{{.SSID}}">
+            <input type="password" name="password" placeholder="{{if eq .Security "Open"}}(no password){{else}}password{{end}}" style="width:10rem">
+            <button type="submit" class="btn">Connect</button>
+          </form>
+        </td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+  {{end}}
+  {{end}}
+</div>
+
 {{range .EmptyRadioFiles}}
 <div class="card" style="border-color:var(--danger)">
   <div class="label-row">

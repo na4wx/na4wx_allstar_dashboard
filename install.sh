@@ -80,6 +80,29 @@ if ! command -v espeak-ng >/dev/null 2>&1 && ! command -v espeak >/dev/null 2>&1
 	fi
 fi
 
+# --- WiFi hotspot fallback (hostapd + dnsmasq) --------------------------
+#
+# Backs internal/wifi's automatic hotspot fallback for nodes running the
+# dhcpcd+wpa_supplicant network stack. Skipped when NetworkManager is
+# already active -- NetworkManager has its own built-in hotspot support
+# (nmcli device wifi hotspot) and needs neither package; see
+# internal/wifi.DetectBackend.
+if systemctl is-active --quiet NetworkManager; then
+	log "NetworkManager is active — skipping hostapd/dnsmasq (using its built-in hotspot support instead)"
+else
+	command -v hostapd >/dev/null 2>&1 || { log "Installing hostapd"; pacman_install hostapd; }
+	command -v dnsmasq >/dev/null 2>&1 || { log "Installing dnsmasq"; pacman_install dnsmasq; }
+
+	# Both ship their own default systemd units/config -- explicitly
+	# disabled so they stay completely inert until internal/wifi's
+	# watchdog starts them itself, directly, against its own generated
+	# config at /etc/hamvoip-gui/hostapd-wlan0.conf and
+	# /etc/hamvoip-gui/dnsmasq-wlan0.conf (see internal/wifi's package
+	# doc) -- never via these units or their own default config files.
+	systemctl disable --now hostapd >/dev/null 2>&1 || true
+	systemctl disable --now dnsmasq >/dev/null 2>&1 || true
+fi
+
 version_ge() { # version_ge A B => A >= B
 	[ "$1" = "$2" ] && return 0
 	[ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -n1)" = "$2" ]

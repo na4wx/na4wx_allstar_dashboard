@@ -18,6 +18,7 @@ import (
 	"hamvoipconfiggui/internal/sounds"
 	"hamvoipconfiggui/internal/soundschedule"
 	"hamvoipconfiggui/internal/system"
+	"hamvoipconfiggui/internal/wifi"
 	"hamvoipconfiggui/internal/wxtone"
 )
 
@@ -87,6 +88,14 @@ type Server struct {
 	cloudAgent      *cloudagent.Agent
 	cloudURLDefault string
 
+	// wifiManager owns wlan0's scan/connect/hotspot-fallback state --
+	// see internal/wifi's package doc. Always non-nil; whether it
+	// actually watches for lost connectivity at all is controlled by
+	// its own enabled flag (see -wifi-hotspot-enabled in main.go), and
+	// which backend (NetworkManager or wpa_supplicant/dhcpcd) it uses is
+	// detected once by StartWiFiWatchdog, not here.
+	wifiManager *wifi.Manager
+
 	// restartNeeded tracks whether any Asterisk config file has been
 	// saved since Asterisk was last (re)started — set via
 	// config.Store.SetChangeHook (every save is to an Asterisk/app_rpt
@@ -112,6 +121,17 @@ func (s *Server) NodeDB() *nodedb.Store { return s.nodes }
 // operator opts in on the Cloud Sync settings card.
 func (s *Server) StartCloudAgent(ctx context.Context) {
 	go s.cloudAgent.Run(ctx)
+}
+
+// StartWiFiWatchdog detects which network backend (NetworkManager or
+// dhcpcd+wpa_supplicant) is present on this system -- one quick
+// shell-out, deferred to here rather than New for the same reason as
+// StartLinkHistoryPoller -- then starts wifiManager's self-healing
+// hotspot-fallback loop. Call once, from main, for the life of the
+// process.
+func (s *Server) StartWiFiWatchdog(ctx context.Context) {
+	s.wifiManager.SetBackend(wifi.DetectBackend(ctx))
+	go s.wifiManager.Run(ctx)
 }
 
 // New builds a Server. templatesFS should contain web/templates and
@@ -147,8 +167,12 @@ func (s *Server) StartCloudAgent(ctx context.Context) {
 // the Cloud Sync settings card and never operator-editable (see
 // cloudagent.New's doc comment for why). cloudAuditLogPath is where
 // every action relayed through the cloud connection is independently
-// recorded — see internal/cloudagent's package doc.
-func New(store *config.Store, authMgr *auth.Manager, templatesFS, staticFS fs.FS, asteriskBin, asteriskLog, sa818Tool, sa818StatePath, nodeDBPath, nodeDBURL, soundsCustomDir, soundsStockDir, soxTool, soundSchedulePath, ttsTool, ttsVoicesDir, skywarnDir, wxTonesPath, cloudSettingsPath, cloudURLDefault, cloudAuditLogPath string) (*Server, error) {
+// recorded — see internal/cloudagent's package doc. wifiHotspotSSID/
+// wifiHotspotPSK are this node's fixed fallback-hotspot credentials,
+// and wifiHotspotEnabled is the escape hatch that disables the
+// self-healing hotspot behavior entirely — see internal/wifi's
+// package doc and -wifi-hotspot-* in main.go.
+func New(store *config.Store, authMgr *auth.Manager, templatesFS, staticFS fs.FS, asteriskBin, asteriskLog, sa818Tool, sa818StatePath, nodeDBPath, nodeDBURL, soundsCustomDir, soundsStockDir, soxTool, soundSchedulePath, ttsTool, ttsVoicesDir, skywarnDir, wxTonesPath, cloudSettingsPath, cloudURLDefault, cloudAuditLogPath, wifiHotspotSSID, wifiHotspotPSK string, wifiHotspotEnabled bool) (*Server, error) {
 	// Built once and shared with cloudAgent below, rather than each
 	// layer constructing its own -- both are thin wrappers over the same
 	// on-disk state, so there's no reason for two separate instances.
@@ -156,7 +180,7 @@ func New(store *config.Store, authMgr *auth.Manager, templatesFS, staticFS fs.FS
 	soundScheduleStore := soundschedule.New(soundSchedulePath)
 	wxTonesStore := wxtone.New(wxTonesPath)
 
-	s := &Server{store: store, auth: authMgr, mux: http.NewServeMux(), asteriskBin: asteriskBin, asteriskLog: asteriskLog, sa818Tool: sa818Tool, sa818StatePath: sa818StatePath, history: newLinkHistory(), nodes: nodedb.New(nodeDBPath, nodeDBURL), sounds: soundsStore, soundSchedule: soundScheduleStore, ttsTool: ttsTool, ttsVoicesDir: ttsVoicesDir, skywarnDir: skywarnDir, wxTones: wxTonesStore, cloudAgent: cloudagent.New(cloudSettingsPath, cloudURLDefault, store, asteriskBin, soundsStore, soundScheduleStore, wxTonesStore, skywarnDir, sa818Tool, sa818StatePath, cloudAuditLogPath), cloudURLDefault: cloudURLDefault}
+	s := &Server{store: store, auth: authMgr, mux: http.NewServeMux(), asteriskBin: asteriskBin, asteriskLog: asteriskLog, sa818Tool: sa818Tool, sa818StatePath: sa818StatePath, history: newLinkHistory(), nodes: nodedb.New(nodeDBPath, nodeDBURL), sounds: soundsStore, soundSchedule: soundScheduleStore, ttsTool: ttsTool, ttsVoicesDir: ttsVoicesDir, skywarnDir: skywarnDir, wxTones: wxTonesStore, cloudAgent: cloudagent.New(cloudSettingsPath, cloudURLDefault, store, asteriskBin, soundsStore, soundScheduleStore, wxTonesStore, skywarnDir, sa818Tool, sa818StatePath, cloudAuditLogPath), cloudURLDefault: cloudURLDefault, wifiManager: wifi.NewManager(wifiHotspotSSID, wifiHotspotPSK, wifiHotspotEnabled)}
 	s.live = newLiveHub(s)
 	store.SetChangeHook(func(string) { s.restartNeeded.Store(true) })
 
@@ -257,6 +281,8 @@ func (s *Server) routes(staticFS fs.FS) {
 	s.mux.HandleFunc("POST /system/hostname", s.requireAuth(s.handleSystemHostname))
 	s.mux.HandleFunc("POST /system/password", s.requireAuth(s.handleSystemPassword))
 	s.mux.HandleFunc("POST /system/network", s.requireAuth(s.handleSystemNetwork))
+	s.mux.HandleFunc("POST /system/wifi/scan", s.requireAuth(s.handleSystemWiFiScan))
+	s.mux.HandleFunc("POST /system/wifi/connect", s.requireAuth(s.handleSystemWiFiConnect))
 	s.mux.HandleFunc("POST /system/sharipi/apply", s.requireAuth(s.handleSystemShariApply))
 	s.mux.HandleFunc("POST /system/sa818/apply", s.requireAuth(s.handleSystemSA818Apply))
 	s.mux.HandleFunc("POST /system/restart-asterisk", s.requireAuth(s.handleSystemRestartAsterisk))
