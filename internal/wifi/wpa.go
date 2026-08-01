@@ -49,6 +49,16 @@ func runWpaCli(ctx context.Context, timeout time.Duration, args ...string) (stri
 }
 
 func (b *wpaBackend) Scan(ctx context.Context) ([]Network, error) {
+	// wpa_cli talks to wpa_supplicant over a control socket that only
+	// exists once wpa_supplicant is actually running on wlan0 -- without
+	// this, a scan attempted before the first-ever Connect() (nothing to
+	// have started the service yet) fails with "Failed to connect to
+	// non-global ctrl_ifname: wlan0: No such file or directory", which
+	// reads like a wpa_cli/wpa_supplicant install problem but usually
+	// just means the service hasn't started yet.
+	if err := ensureServiceRunning(ctx, wpaSupplicantUnit); err != nil {
+		return nil, err
+	}
 	if _, err := runWpaCli(ctx, 10*time.Second, "scan"); err != nil {
 		return nil, err
 	}
@@ -216,6 +226,13 @@ func (b *wpaBackend) Status(ctx context.Context) (Status, error) {
 	// it first, independent of whether wpa_supplicant is even running.
 	if active, ssid := wpaHotspotActive(); active {
 		return Status{Mode: ModeHotspot, SSID: ssid, IPAddress: hotspotStaticIP}, nil
+	}
+	// Same reasoning as Scan's own ensureServiceRunning call -- without
+	// this, the System page's very first load (before wpa_supplicant has
+	// ever been started) would show a WiFi status error instead of a
+	// plain "not connected".
+	if err := ensureServiceRunning(ctx, wpaSupplicantUnit); err != nil {
+		return Status{}, err
 	}
 	out, err := runWpaCli(ctx, 5*time.Second, "status")
 	if err != nil {
