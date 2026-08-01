@@ -39,13 +39,28 @@ func runWpaCli(ctx context.Context, timeout time.Duration, args ...string) (stri
 	c.Stdout = &out
 	c.Stderr = &stderr
 	if err := c.Run(); err != nil {
-		return "", fmt.Errorf("wpa_cli %s: %w: %s", strings.Join(args, " "), err, stderr.String())
+		return "", wrapWpaCliError(args, fmt.Errorf("wpa_cli %s: %w: %s", strings.Join(args, " "), err, stderr.String()), stderr.String())
 	}
 	result := strings.TrimSpace(out.String())
 	if strings.HasPrefix(result, "FAIL") {
 		return "", fmt.Errorf("wpa_cli %s: %s", strings.Join(args, " "), result)
 	}
 	return result, nil
+}
+
+// wrapWpaCliError adds an actionable hint for the one wpa_cli failure
+// mode that isn't self-explanatory: wpa_supplicant only creates a
+// ctrl_interface control socket if its own config file explicitly sets
+// one. Confirmed missing on a real HamVoIP/Arch ARM node whose
+// wpa_supplicant@wlan0.service ran against a bare "network={...}"
+// block with no ctrl_interface= line at all -- install.sh now patches
+// that automatically, but this covers any node it doesn't reach (a
+// manually-managed config, a different distro's layout, ...).
+func wrapWpaCliError(args []string, wrapped error, stderr string) error {
+	if strings.Contains(stderr, "ctrl_ifname") {
+		return fmt.Errorf(`%w (wpa_supplicant has no ctrl_interface configured -- add "ctrl_interface=/run/wpa_supplicant" to its config file and run "systemctl restart %s", or re-run install.sh)`, wrapped, wpaSupplicantUnit)
+	}
+	return wrapped
 }
 
 func (b *wpaBackend) Scan(ctx context.Context) ([]Network, error) {

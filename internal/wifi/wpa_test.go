@@ -1,9 +1,31 @@
 package wifi
 
 import (
+	"errors"
 	"reflect"
+	"strings"
 	"testing"
 )
+
+func TestWrapWpaCliErrorAddsHintForMissingCtrlInterface(t *testing.T) {
+	base := errors.New("wpa_cli scan: exit status 255: Failed to connect to non-global ctrl_ifname: wlan0 error: No such file or directory")
+	stderr := "Failed to connect to non-global ctrl_ifname: wlan0 error: No such file or directory\n"
+	got := wrapWpaCliError([]string{"scan"}, base, stderr)
+	if !strings.Contains(got.Error(), "ctrl_interface") {
+		t.Errorf("wrapWpaCliError() = %q, want a hint mentioning ctrl_interface", got.Error())
+	}
+	if !errors.Is(got, base) {
+		t.Error("wrapWpaCliError() lost the original error from errors.Is's point of view")
+	}
+}
+
+func TestWrapWpaCliErrorLeavesOtherErrorsUnchanged(t *testing.T) {
+	base := errors.New("wpa_cli status: exit status 1: some other failure")
+	got := wrapWpaCliError([]string{"status"}, base, "some other failure\n")
+	if got != base {
+		t.Errorf("wrapWpaCliError() = %v, want the original error unchanged", got)
+	}
+}
 
 func TestParseWpaScanResults(t *testing.T) {
 	out := "bssid\tfrequency\tsignal level\tflags\tssid\n" +

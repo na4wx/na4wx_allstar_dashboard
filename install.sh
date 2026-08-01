@@ -101,6 +101,42 @@ else
 	# doc) -- never via these units or their own default config files.
 	systemctl disable --now hostapd >/dev/null 2>&1 || true
 	systemctl disable --now dnsmasq >/dev/null 2>&1 || true
+
+	# wpa_supplicant only creates a ctrl_interface control socket if its
+	# own config file explicitly sets one -- confirmed missing on a real
+	# HamVoIP/Arch ARM node (its wpa_supplicant@wlan0.service runs
+	# against a plain "network={...}" block with no ctrl_interface= line
+	# at all), which makes every wpa_cli command internal/wifi/wpa.go
+	# relies on fail with "Failed to connect to non-global ctrl_ifname:
+	# wlan0: No such file or directory". Patches whichever config file
+	# the running (or configured-to-run) wpa_supplicant@wlan0 instance
+	# actually uses -- not assumed to be the "standard"
+	# wpa_supplicant-wlan0.conf name, since this image's own copy is
+	# custom-named (wpa_supplicant_custom-wlan0.conf).
+	WPA_CONF=""
+	if WPA_PID=$(pgrep -f 'wpa_supplicant .*-iwlan0' | head -n1) && [ -n "$WPA_PID" ]; then
+		WPA_CONF=$(tr '\0' '\n' <"/proc/$WPA_PID/cmdline" | sed -n 's/^-c//p' | head -n1)
+	fi
+	if [ -z "$WPA_CONF" ]; then
+		WPA_CONF=$(systemctl cat wpa_supplicant@wlan0.service 2>/dev/null | sed -n 's/.*-c\([^ ]*wlan0\.conf\).*/\1/p' | head -n1)
+	fi
+	if [ -n "$WPA_CONF" ] && [ -f "$WPA_CONF" ]; then
+		if grep -q '^ctrl_interface=' "$WPA_CONF"; then
+			log "wpa_supplicant ctrl_interface already configured in $WPA_CONF"
+		else
+			log "Adding ctrl_interface to $WPA_CONF so the System page's Wireless scan/connect can talk to wpa_supplicant"
+			WPA_CONF_PERMS=$(stat -c '%a' "$WPA_CONF" 2>/dev/null || echo 600)
+			{
+				printf 'ctrl_interface=/run/wpa_supplicant\nctrl_interface_group=0\n\n'
+				cat "$WPA_CONF"
+			} >"$WPA_CONF.tmp"
+			chmod "$WPA_CONF_PERMS" "$WPA_CONF.tmp"
+			mv "$WPA_CONF.tmp" "$WPA_CONF"
+			systemctl restart wpa_supplicant@wlan0.service || log "warning: could not restart wpa_supplicant@wlan0.service after adding ctrl_interface — restart it manually"
+		fi
+	else
+		log "warning: could not determine which config file wpa_supplicant@wlan0.service uses — if the System page's Wireless scan/connect fails with a ctrl_ifname error, add 'ctrl_interface=/run/wpa_supplicant' to its config file manually and restart the service"
+	fi
 fi
 
 version_ge() { # version_ge A B => A >= B
