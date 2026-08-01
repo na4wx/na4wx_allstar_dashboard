@@ -182,6 +182,31 @@ func normalizeWpaFlags(flags string) string {
 	}
 }
 
+// associationTimeout bounds how long Connect waits for the newly
+// selected network to actually associate before treating it as
+// failed and restoring every other configured network -- see
+// Connect's own doc comment for why this exists. Generous for a plain
+// WPA2 4-way handshake (normally a couple of seconds), which is all
+// this measures -- it doesn't wait for DHCP. A var, not a const, so
+// tests can shorten it rather than actually waiting out the real
+// timeout on the failure path.
+var associationTimeout = 15 * time.Second
+
+// Connect adds ssid/psk as a new network and switches to it.
+//
+// Ordering here matters and was the direct cause of a real incident:
+// the previous version called select_network (which disables every
+// *other* configured network) before save_config. A save_config
+// failure (e.g. wpa_supplicant's config missing update_config=1, see
+// wrapWpaCliFailResult) still left the device switched off a
+// previously-working network with nothing persisted to fall back to
+// -- silently stranding it. Now save_config runs first, before
+// anything live is touched, so a failure up to that point never
+// disturbs an existing working connection. And even after
+// select_network runs, if the new network doesn't actually associate
+// within associationTimeout (wrong password, out of range, ...),
+// every other configured network is re-enabled rather than leaving
+// the operator stranded on one that doesn't work.
 func (b *wpaBackend) Connect(ctx context.Context, ssid, psk string) error {
 	if err := ValidateSSID(ssid); err != nil {
 		return err
@@ -213,22 +238,47 @@ func (b *wpaBackend) Connect(ctx context.Context, ssid, psk string) error {
 	} else if _, err := runWpaCli(ctx, 10*time.Second, "set_network", id, "key_mgmt", "NONE"); err != nil {
 		return err
 	}
-	if _, err := runWpaCli(ctx, 10*time.Second, "enable_network", id); err != nil {
-		return err
-	}
-	// Prioritizes this network over any others already configured, so
-	// it's the one wpa_supplicant actually tries next.
-	if _, err := runWpaCli(ctx, 10*time.Second, "select_network", id); err != nil {
-		return err
-	}
 	// Persists into wpa_supplicant's own config so it survives a
-	// reboot; dhcpcd already handles wlan0's DHCP once associated (see
-	// wpaSupplicantUnit's own doc comment), so nothing further is
-	// needed here.
+	// reboot -- deliberately before enable_network/select_network below;
+	// see this method's own doc comment for why the ordering matters.
 	if _, err := runWpaCli(ctx, 10*time.Second, "save_config"); err != nil {
 		return err
 	}
+	if _, err := runWpaCli(ctx, 10*time.Second, "enable_network", id); err != nil {
+		return err
+	}
+	// Forces an immediate attempt at the new network by disabling every
+	// other one. If it doesn't actually pan out, the code below
+	// restores them rather than leaving this as a dead end.
+	if _, err := runWpaCli(ctx, 10*time.Second, "select_network", id); err != nil {
+		return err
+	}
+	if !b.waitForAssociation(ctx, ssid, associationTimeout) {
+		_, _ = runWpaCli(ctx, 10*time.Second, "enable_network", "all")
+		return fmt.Errorf("saved %q, but it did not connect within %s -- re-enabled previously configured networks so this device isn't stranded; double-check the password and try again", ssid, associationTimeout)
+	}
 	return nil
+}
+
+// waitForAssociation polls wpa_cli status until wlan0 is actually
+// associated to ssid, or timeout elapses.
+func (b *wpaBackend) waitForAssociation(ctx context.Context, ssid string, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for {
+		if out, err := runWpaCli(ctx, 5*time.Second, "status"); err == nil {
+			if st := parseWpaStatus(out); st.Mode == ModeClient && st.SSID == ssid {
+				return true
+			}
+		}
+		if time.Now().After(deadline) {
+			return false
+		}
+		select {
+		case <-ctx.Done():
+			return false
+		case <-time.After(1 * time.Second):
+		}
+	}
 }
 
 // setNetworkPSK is split out from the ordinary runWpaCli path

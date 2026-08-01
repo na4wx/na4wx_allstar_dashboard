@@ -49,7 +49,9 @@ func (s *Server) handleSystemWiFiConnect(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	// Generous relative to wpa.go's own associationTimeout (15s) plus
+	// overhead from several individual wpa_cli calls ahead of it.
+	ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
 	defer cancel()
 	if err := s.wifiManager.Backend().Connect(ctx, ssid, password); err != nil {
 		s.renderSystemPage(w, r, flash("error", "Couldn't connect: "+err.Error()))
