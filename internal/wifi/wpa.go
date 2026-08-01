@@ -43,9 +43,25 @@ func runWpaCli(ctx context.Context, timeout time.Duration, args ...string) (stri
 	}
 	result := strings.TrimSpace(out.String())
 	if strings.HasPrefix(result, "FAIL") {
-		return "", fmt.Errorf("wpa_cli %s: %s", strings.Join(args, " "), result)
+		return "", wrapWpaCliFailResult(args, result)
 	}
 	return result, nil
+}
+
+// wrapWpaCliFailResult adds an actionable hint for the one plain-"FAIL"
+// wpa_cli result that isn't self-explanatory: wpa_supplicant refuses
+// to persist anything back to its config file unless that file itself
+// sets update_config=1 -- a deliberate safety default, but one this
+// HamVoIP/Arch ARM node's own config didn't have, confirmed on real
+// hardware. By the time save_config runs, the network switch itself
+// has already happened in memory (select_network succeeded); without
+// update_config=1 it just silently wouldn't survive a reboot.
+func wrapWpaCliFailResult(args []string, result string) error {
+	err := fmt.Errorf("wpa_cli %s: %s", strings.Join(args, " "), result)
+	if len(args) > 0 && args[0] == "save_config" {
+		return fmt.Errorf(`%w (wpa_supplicant config has no "update_config=1" set, so it refuses to persist changes -- add "update_config=1" to its config file and run "systemctl restart %s", or re-run install.sh)`, err, wpaSupplicantUnit)
+	}
+	return err
 }
 
 // wrapWpaCliError adds an actionable hint for the one wpa_cli failure

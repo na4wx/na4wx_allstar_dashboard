@@ -27,6 +27,20 @@ func TestWrapWpaCliErrorLeavesOtherErrorsUnchanged(t *testing.T) {
 	}
 }
 
+func TestWrapWpaCliFailResultAddsHintForSaveConfig(t *testing.T) {
+	got := wrapWpaCliFailResult([]string{"save_config"}, "FAIL")
+	if !strings.Contains(got.Error(), "update_config") {
+		t.Errorf("wrapWpaCliFailResult() = %q, want a hint mentioning update_config", got.Error())
+	}
+}
+
+func TestWrapWpaCliFailResultLeavesOtherCommandsUnhinted(t *testing.T) {
+	got := wrapWpaCliFailResult([]string{"select_network", "0"}, "FAIL")
+	if strings.Contains(got.Error(), "update_config") {
+		t.Errorf("wrapWpaCliFailResult() = %q, want no update_config hint for a non-save_config command", got.Error())
+	}
+}
+
 func TestParseWpaScanResults(t *testing.T) {
 	out := "bssid\tfrequency\tsignal level\tflags\tssid\n" +
 		"00:11:22:33:44:55\t2412\t-45\t[WPA2-PSK-CCMP][ESS]\tMyHomeNetwork\n" +
