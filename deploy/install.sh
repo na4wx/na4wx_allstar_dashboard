@@ -48,7 +48,26 @@ systemctl daemon-reload
 systemctl enable hamvoip-gui
 systemctl restart hamvoip-gui
 
-IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+# Reports eth0/wlan0's own address specifically, rather than
+# `hostname -I`'s first-interface-wins guess -- on a node with both
+# connected, that guess is often wrong about which one an operator
+# actually wants to visit.
+iface_ip() {
+	ip -4 -o addr show dev "$1" 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -n1
+}
+
+ETH0_IP=$(iface_ip eth0)
+WLAN0_IP=$(iface_ip wlan0)
+
 echo
 echo "Installed and started. Visit this URL to finish setup:"
-echo "  http://${IP:-<this-pi-ip>}:8088/setup"
+if [ -n "$ETH0_IP" ] && [ -n "$WLAN0_IP" ]; then
+	echo "  http://$ETH0_IP:8088/setup   (Ethernet)"
+	echo "  http://$WLAN0_IP:8088/setup   (WiFi)"
+elif [ -n "$ETH0_IP" ]; then
+	echo "  http://$ETH0_IP:8088/setup"
+elif [ -n "$WLAN0_IP" ]; then
+	echo "  http://$WLAN0_IP:8088/setup"
+else
+	echo "  http://<this-pi-ip>:8088/setup"
+fi
