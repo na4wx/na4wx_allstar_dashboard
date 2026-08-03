@@ -51,8 +51,11 @@ type Manager struct {
 	// can drive the state machine without real network state, same
 	// "parameterized for testability while the public function isn't"
 	// shape as system.listNetworkInterfaces vs its own exported
-	// ListNetworkInterfaces wrapper.
-	hasRoute func(context.Context) (bool, error)
+	// ListNetworkInterfaces wrapper. The string arg is the interface to
+	// exclude from consideration -- see defaultRouteExists's own doc
+	// comment for why checkAndAct passes wlan0 while the hotspot is
+	// active.
+	hasRoute func(ctx context.Context, excludeIface string) (bool, error)
 
 	// startCaptivePortal is the package-level startCaptivePortal func by
 	// default -- overridable for the same reason as hasRoute: without
@@ -152,7 +155,11 @@ func (m *Manager) checkAndAct(ctx context.Context) {
 		return
 	}
 
-	hasRoute, err := m.hasRoute(ctx)
+	excludeIface := ""
+	if hotspotActive {
+		excludeIface = wlan0Iface
+	}
+	hasRoute, err := m.hasRoute(ctx, excludeIface)
 	if err != nil {
 		// Fail toward trying to help, not toward silently doing
 		// nothing: if we can't even tell whether there's a route,

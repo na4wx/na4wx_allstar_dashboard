@@ -33,7 +33,7 @@ func newTestManager(hasRoute bool) (*Manager, *fakeBackend) {
 	fb := &fakeBackend{}
 	m := NewManager("test-ssid", "test-password", "8088", true)
 	m.SetBackend(fb)
-	m.hasRoute = func(context.Context) (bool, error) { return hasRoute, nil }
+	m.hasRoute = func(context.Context, string) (bool, error) { return hasRoute, nil }
 	m.startCaptivePortal = func(string) *captivePortal { return nil }
 	return m, fb
 }
@@ -126,5 +126,45 @@ func TestCheckAndActBacksOffAfterFailedHotspotAttempt(t *testing.T) {
 	m.checkAndAct(context.Background())
 	if fb.startHotspotCalls != 1 {
 		t.Errorf("StartHotspot calls = %d, want 1 -- repeated immediate calls should be held off by hotspotRetryBackoff", fb.startHotspotCalls)
+	}
+}
+
+// TestCheckAndActExcludesWlan0RouteWhileHotspotActive is the direct
+// regression test for a real incident: the fallback hotspot came up, a
+// phone associated and got a DHCP lease, and the very next watchdog
+// tick tore the hotspot back down again -- traced to a default route
+// appearing via wlan0 itself (see route.go's own doc comment). This
+// confirms checkAndAct actually asks hasRoute to ignore wlan0 while the
+// hotspot it stood up is the thing running there.
+func TestCheckAndActExcludesWlan0RouteWhileHotspotActive(t *testing.T) {
+	m, _ := newTestManager(false)
+	var gotExclude string
+	m.hasRoute = func(_ context.Context, excludeIface string) (bool, error) {
+		gotExclude = excludeIface
+		return true, nil
+	}
+	m.hotspotActive = true
+	m.checkAndAct(context.Background())
+	if gotExclude != wlan0Iface {
+		t.Errorf("excludeIface = %q, want %q while hotspotActive", gotExclude, wlan0Iface)
+	}
+}
+
+// TestCheckAndActDoesNotExcludeWlan0RouteWhenHotspotInactive makes sure
+// the exclusion in the test above is conditional, not blanket -- a real
+// client-mode WiFi connection via wlan0 (no hotspot running) must still
+// count as a genuine route, or the watchdog would never recognize a
+// successful Connect() and would keep fighting it every tick.
+func TestCheckAndActDoesNotExcludeWlan0RouteWhenHotspotInactive(t *testing.T) {
+	m, _ := newTestManager(false)
+	gotExclude := "sentinel-should-be-overwritten"
+	m.hasRoute = func(_ context.Context, excludeIface string) (bool, error) {
+		gotExclude = excludeIface
+		return false, nil
+	}
+	m.hotspotActive = false
+	m.checkAndAct(context.Background())
+	if gotExclude != "" {
+		t.Errorf("excludeIface = %q, want \"\" when hotspot isn't active", gotExclude)
 	}
 }
