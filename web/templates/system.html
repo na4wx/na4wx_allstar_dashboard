@@ -118,10 +118,20 @@
   </div>
   <p class="hint">If this node loses all network connectivity, it automatically becomes a WiFi hotspot named "{{.WiFiHotspotSSID}}" — join it from a phone or laptop to reach this page and pick a real network.</p>
 
+  {{if eq .WiFiStatus.Mode "hotspot"}}
+  <p class="hint">Scanning isn't available while broadcasting the fallback hotspot — this node's WiFi radio is busy running it, and scanning would drop your own connection to this page. Enter the network name and password directly below instead.</p>
+  {{else}}
   <form method="post" action="/system/wifi/scan" style="margin-top:0.75rem">
     <div class="actions" style="margin-top:0">
       <button type="submit" class="btn">Scan for networks</button>
     </div>
+  </form>
+  {{end}}
+
+  <form method="post" action="/system/wifi/connect" style="margin-top:0.75rem; display:flex; gap:0.5rem; align-items:center">
+    <input type="text" name="ssid" placeholder="Network name (SSID)" required style="width:12rem">
+    <input type="password" name="password" placeholder="password (blank for open network)" style="width:12rem">
+    <button type="submit" class="btn">Connect</button>
   </form>
 
   {{if .WiFiNetworks}}

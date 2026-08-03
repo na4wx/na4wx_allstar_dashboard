@@ -17,7 +17,23 @@ func (s *Server) handleSystemWiFiScan(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 	defer cancel()
 
-	networks, err := s.wifiManager.Backend().Scan(ctx)
+	backend := s.wifiManager.Backend()
+	// Scanning needs wlan0 in station mode (the wpa_supplicant/dhcpcd
+	// backend's own Scan starts wpa_supplicant on wlan0 if it isn't
+	// already running) -- doing that while the fallback hotspot
+	// (hostapd, AP mode) is running on the very same physical radio
+	// conflicts directly with it. Confirmed on a real node: scanning
+	// while joined only via the hotspot knocked the operator's own
+	// device straight off it. Connect doesn't have this problem -- it's
+	// *expected* to drop the hotspot as it hands wlan0 over to the new
+	// network, and the operator can type the SSID/password directly
+	// without ever needing a scan first.
+	if st, err := backend.Status(ctx); err == nil && st.Mode == wifi.ModeHotspot {
+		s.renderSystemPage(w, r, flash("error", "Can't scan while broadcasting the fallback hotspot — this node's WiFi radio is busy running it, and scanning would drop your connection to this page. Enter the network name and password directly below and click Connect instead; the hotspot will drop automatically once the new connection is confirmed."))
+		return
+	}
+
+	networks, err := backend.Scan(ctx)
 	if err != nil {
 		s.renderSystemPage(w, r, flash("error", "Scan failed: "+err.Error()))
 		return

@@ -83,15 +83,25 @@ func TestSystemPageWiFiCardRenders(t *testing.T) {
 				pageData: pageData{LoggedIn: true}, WiFiAvailable: true, WiFiBackendName: "NetworkManager",
 				WiFiStatus: wifi.Status{Mode: wifi.ModeClient, SSID: "MyHomeNetwork", IPAddress: "192.168.1.50"},
 			},
-			want: []string{"Connected to", "MyHomeNetwork", "192.168.1.50"},
+			want: []string{"Connected to", "MyHomeNetwork", "192.168.1.50", "Scan for networks", "Network name (SSID)"},
 		},
 		{
+			// Direct regression coverage for a real incident: scanning
+			// while the fallback hotspot is active starts wpa_supplicant
+			// on the same physical radio hostapd is using for AP mode,
+			// which knocked the operator's own device straight off the
+			// hotspot. The Scan button must not be offered in this mode,
+			// and the manual SSID/password entry form (the only other way
+			// to reach handleSystemWiFiConnect) must still be present --
+			// otherwise an operator joined only via the hotspot would have
+			// no way at all to connect to a real network from this page.
 			name: "hotspot active",
 			data: systemPageData{
 				pageData: pageData{LoggedIn: true}, WiFiAvailable: true, WiFiBackendName: "wpa_supplicant/dhcpcd", WiFiHotspotSSID: "hamvoip-gui-setup",
 				WiFiStatus: wifi.Status{Mode: wifi.ModeHotspot, SSID: "hamvoip-gui-setup"},
 			},
-			want: []string{"Broadcasting fallback hotspot"},
+			want:    []string{"Broadcasting fallback hotspot", "Scanning isn't available", "Network name (SSID)"},
+			notWant: []string{"Scan for networks"},
 		},
 		{
 			name: "scan results table",
