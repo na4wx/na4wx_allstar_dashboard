@@ -91,10 +91,23 @@ func (b *wpaBackend) StartHotspot(ctx context.Context, ssid, psk string) error {
 	return nil
 }
 
+// StopHotspot hands wlan0 back to normal client-mode use -- called both
+// for a genuine "a real connection came back" teardown and, via
+// StartHotspot's own deferred cleanup, when standing up the hotspot
+// failed partway through. Confirmed the hard way on real hardware: this
+// used to never restart wpa_supplicant, so a StartHotspot failure left
+// wlan0 with neither a hotspot nor a working client connection -- and
+// since the watchdog retried every tick, it kept re-stopping
+// wpa_supplicant every 30s indefinitely, a strictly worse outcome than
+// doing nothing.
 func (b *wpaBackend) StopHotspot(ctx context.Context) error {
 	_ = stopByPidfile(dnsmasqPidPath)
 	_ = stopByPidfile(hostapdPidPath)
 	_ = runIPCmd(ctx, "addr", "flush", "dev", wlan0Iface)
+	// Start, not restart -- idempotent if it's already running, and
+	// matches ensureServiceRunning's own reasoning elsewhere in this
+	// package: never bounce an already-good state unnecessarily.
+	_ = startService(ctx, wpaSupplicantUnit)
 	// Best-effort: hand wlan0's DHCP-client duty back to dhcpcd. Never a
 	// full dhcpcd restart -- same eth0-safety reasoning as StartHotspot.
 	_ = runIP(ctx, "dhcpcd", "--rebind", wlan0Iface)

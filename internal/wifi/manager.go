@@ -18,6 +18,15 @@ const (
 	// Connect() that takes longer than one tick to actually get an IP
 	// would race the very next watchdog tick and undo itself.
 	connectGracePeriod = 45 * time.Second
+
+	// hotspotRetryBackoff bounds how often a failing StartHotspot gets
+	// retried -- confirmed the hard way on real hardware: without this,
+	// a StartHotspot that fails every time (e.g. hostapd's nl80211
+	// driver not actually working on this WiFi chipset) got retried
+	// every single wifiWatchdogInterval tick, forever, each attempt
+	// stopping wpa_supplicant on its way in -- repeatedly cutting off
+	// the very connectivity this watchdog exists to recover.
+	hotspotRetryBackoff = 2 * time.Minute
 )
 
 // Manager owns this node's wlan0 hotspot-fallback state machine:
@@ -33,6 +42,7 @@ type Manager struct {
 	enabled            bool
 	hotspotActive      bool
 	lastConnectAttempt time.Time
+	lastHotspotAttempt time.Time
 
 	// hasRoute is defaultRouteExists by default -- overridable so tests
 	// can drive the state machine without real network state, same
@@ -115,6 +125,7 @@ func (m *Manager) checkAndAct(ctx context.Context) {
 	backend := m.backend
 	hotspotActive := m.hotspotActive
 	lastConnectAttempt := m.lastConnectAttempt
+	lastHotspotAttempt := m.lastHotspotAttempt
 	ssid, psk := m.hotspotSSID, m.hotspotPSK
 	m.mu.Unlock()
 
@@ -135,6 +146,12 @@ func (m *Manager) checkAndAct(ctx context.Context) {
 		if time.Since(lastConnectAttempt) < connectGracePeriod {
 			return
 		}
+		if !lastHotspotAttempt.IsZero() && time.Since(lastHotspotAttempt) < hotspotRetryBackoff {
+			return
+		}
+		m.mu.Lock()
+		m.lastHotspotAttempt = time.Now()
+		m.mu.Unlock()
 		if err := backend.StartHotspot(ctx, ssid, psk); err == nil {
 			m.mu.Lock()
 			m.hotspotActive = true

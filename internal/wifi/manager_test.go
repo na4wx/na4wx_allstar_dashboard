@@ -108,3 +108,21 @@ func TestCheckAndActStartFailureLeavesHotspotActiveFalse(t *testing.T) {
 		t.Error("hotspotActive = true after a failed StartHotspot, want false")
 	}
 }
+
+// TestCheckAndActBacksOffAfterFailedHotspotAttempt is the direct
+// regression test for a real incident: a StartHotspot that fails every
+// time (e.g. a driver that doesn't actually support the hotspot's AP
+// mode) got retried on every single tick, forever, each attempt
+// stopping wpa_supplicant on its way in and never successfully
+// bringing anything back up -- repeatedly cutting off the very
+// connectivity this watchdog exists to recover.
+func TestCheckAndActBacksOffAfterFailedHotspotAttempt(t *testing.T) {
+	m, fb := newTestManager(false)
+	fb.startErr = context.DeadlineExceeded
+	m.checkAndAct(context.Background())
+	m.checkAndAct(context.Background())
+	m.checkAndAct(context.Background())
+	if fb.startHotspotCalls != 1 {
+		t.Errorf("StartHotspot calls = %d, want 1 -- repeated immediate calls should be held off by hotspotRetryBackoff", fb.startHotspotCalls)
+	}
+}
