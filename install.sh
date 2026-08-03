@@ -205,10 +205,20 @@ else
 		SIGCONTEXT_H
 
 		if git clone --quiet --depth 1 --branch hostap_2_11 https://w1.fi/hostap.git "$HOSTAPD_BUILD_DIR/hostap"; then
+			# CONFIG_TLS=internal's crypto backend (CONFIG_CRYPTO=internal)
+			# links the *system's* libtommath by default -- confirmed on the
+			# real node: not installed there, and adding a new external
+			# dependency just to avoid the OpenSSL one we started this whole
+			# build to get away from would be self-defeating.
+			# CONFIG_INTERNAL_LIBTOMMATH=y switches to hostapd's own bundled
+			# copy (src/tls/libtommath.c, confirmed present in this source
+			# tree) instead, compiled straight in -- no external dependency
+			# at all.
 			cat >"$HOSTAPD_BUILD_DIR/hostap/hostapd/.config" <<-'HOSTAPD_CONFIG'
 			CONFIG_DRIVER_NL80211=y
 			CONFIG_LIBNL32=y
 			CONFIG_TLS=internal
+			CONFIG_INTERNAL_LIBTOMMATH=y
 			HOSTAPD_CONFIG
 
 			# hostap_2_11's driver_nl80211.c reads
