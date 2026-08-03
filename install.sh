@@ -210,6 +210,27 @@ else
 			CONFIG_LIBNL32=y
 			CONFIG_TLS=internal
 			HOSTAPD_CONFIG
+
+			# hostap_2_11's driver_nl80211.c reads
+			# NL80211_STA_INFO_ACK_SIGNAL_AVG (an optional, purely
+			# informational per-station stat -- irrelevant to whether the AP
+			# actually works) via NLA_S8/nla_get_s8, netlink attribute types
+			# this system's libnl (3.2.26, confirmed on the real node) predates
+			# and doesn't declare at all. Rather than depend on a newer libnl,
+			# this switches that one field to the exact same well-supported
+			# NLA_U8 + "(s8) nla_get_u8(...)" cast hostapd's own source already
+			# uses one field above it (BEACON_SIGNAL_AVG) for identical signed
+			# 8-bit signal data -- not a workaround, the same pattern hostapd
+			# itself already relies on elsewhere in this file.
+			HOSTAPD_NLA_FILE="$HOSTAPD_BUILD_DIR/hostap/src/drivers/driver_nl80211.c"
+			sed -i \
+				-e 's/\[NL80211_STA_INFO_ACK_SIGNAL_AVG\] = { \.type = NLA_S8 },/[NL80211_STA_INFO_ACK_SIGNAL_AVG] = { .type = NLA_U8 },/' \
+				-e 's/nla_get_s8(stats\[NL80211_STA_INFO_ACK_SIGNAL_AVG\]);/(s8) nla_get_u8(stats[NL80211_STA_INFO_ACK_SIGNAL_AVG]);/' \
+				"$HOSTAPD_NLA_FILE"
+			if grep -q "NLA_S8\|nla_get_s8" "$HOSTAPD_NLA_FILE"; then
+				log "warning: expected NLA_S8/nla_get_s8 references in driver_nl80211.c weren't fully patched (hostap_2_11's source may have changed) — the build below may still fail on an old libnl"
+			fi
+
 			if CPATH="$HOSTAPD_HDR_OVERRIDE" make -C "$HOSTAPD_BUILD_DIR/hostap/hostapd" -j"$(nproc)" >"$HOSTAPD_BUILD_DIR/build.log" 2>&1; then
 				install -Dm755 "$HOSTAPD_BUILD_DIR/hostap/hostapd/hostapd" /usr/local/bin/hostapd
 			else
