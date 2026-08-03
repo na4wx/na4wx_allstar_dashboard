@@ -22,9 +22,9 @@ cat <<'EOF'
 ║     ██║╚██╗██║██╔══██║╚════██║██║███╗██║ ██╔██╗          ║
 ║     ██║ ╚████║██║  ██║     ██║╚███╔███╔╝██╔╝ ██╗         ║
 ║     ╚═╝  ╚═══╝╚═╝  ╚═╝     ╚═╝ ╚══╝╚══╝ ╚═╝  ╚═╝         ║
-║     ____________________________________________         ║
+║                                                          ║
 ║            A L L S T A R   D A S H B O A R D             ║
-║     ____________________________________________         ║
+║                                                          ║
 ╚══════════════════════════════════════════════════════════╝
 EOF
 
@@ -33,8 +33,30 @@ set -euo pipefail
 MIN_GO_VERSION="1.22"
 GO_TARBALL_VERSION="1.22.5"
 
-log() { echo "==> $*"; }
-err() { echo "error: $*" >&2; exit 1; }
+# Colors only when actually printing to a terminal (never to a redirected
+# log file, where raw escape codes would just show up as garbage), and
+# only when the operator hasn't opted out via the standard NO_COLOR
+# convention (https://no-color.org/).
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+	C_BOLD=$'\033[1m'
+	C_BLUE=$'\033[34m'
+	C_GREEN=$'\033[32m'
+	C_YELLOW=$'\033[33m'
+	C_RED=$'\033[31m'
+	C_RESET=$'\033[0m'
+else
+	C_BOLD='' C_BLUE='' C_GREEN='' C_YELLOW='' C_RED='' C_RESET=''
+fi
+
+# WARNINGS collects every warn() message as it happens, so the run ends
+# with one scannable list of what actually needs attention instead of
+# leaving the operator to scroll back through everything else this
+# script printed along the way to find it again.
+WARNINGS=()
+
+log()  { printf '%s==>%s %s\n' "$C_BLUE$C_BOLD" "$C_RESET" "$*"; }
+warn() { WARNINGS+=("$*"); printf '%s==> warning:%s %s\n' "$C_YELLOW$C_BOLD" "$C_RESET" "$*" >&2; }
+err()  { printf '%serror:%s %s\n' "$C_RED$C_BOLD" "$C_RESET" "$*" >&2; exit 1; }
 
 [ "$(id -u)" = "0" ] || err "run as root: sudo ./install.sh"
 command -v pacman >/dev/null 2>&1 || err "pacman not found — this script is for Arch Linux (HamVoIP's OS)"
@@ -100,7 +122,7 @@ if ! command -v espeak-ng >/dev/null 2>&1 && ! command -v espeak >/dev/null 2>&1
 		ESPEAK_INSTALL_STATUS=$?
 		set -e
 		if [ "$ESPEAK_INSTALL_STATUS" != "0" ]; then
-			log "warning: couldn't install espeak fallback package (tried espeak-ng and espeak). Text-to-speech fallback may be unavailable unless one is installed manually."
+			warn "couldn't install espeak fallback package (tried espeak-ng and espeak). Text-to-speech fallback may be unavailable unless one is installed manually."
 		fi
 	fi
 fi
@@ -264,16 +286,16 @@ else
 				-e 's/nla_get_s8(stats\[NL80211_STA_INFO_ACK_SIGNAL_AVG\]);/(s8) nla_get_u8(stats[NL80211_STA_INFO_ACK_SIGNAL_AVG]);/' \
 				"$HOSTAPD_NLA_FILE"
 			if grep -q "NLA_S8\|nla_get_s8" "$HOSTAPD_NLA_FILE"; then
-				log "warning: expected NLA_S8/nla_get_s8 references in driver_nl80211.c weren't fully patched (hostap_2_11's source may have changed) — the build below may still fail on an old libnl"
+				warn "expected NLA_S8/nla_get_s8 references in driver_nl80211.c weren't fully patched (hostap_2_11's source may have changed) — the build below may still fail on an old libnl"
 			fi
 
 			if CPATH="$HOSTAPD_HDR_OVERRIDE" make -C "$HOSTAPD_BUILD_DIR/hostap/hostapd" -j"$(nproc)" >"$HOSTAPD_BUILD_DIR/build.log" 2>&1; then
 				install -Dm755 "$HOSTAPD_BUILD_DIR/hostap/hostapd/hostapd" /usr/local/bin/hostapd
 			else
-				log "warning: building hostapd from source failed — see $HOSTAPD_BUILD_DIR/build.log for details. The WiFi hotspot fallback will not work until this is fixed."
+				warn "building hostapd from source failed — see $HOSTAPD_BUILD_DIR/build.log for details. The WiFi hotspot fallback will not work until this is fixed."
 			fi
 		else
-			log "warning: could not fetch hostapd source (https://w1.fi/hostap.git) — check network access. The WiFi hotspot fallback will not work until this is fixed."
+			warn "could not fetch hostapd source (https://w1.fi/hostap.git) — check network access. The WiFi hotspot fallback will not work until this is fixed."
 		fi
 
 		# Checks the explicit install path, not the bare "hostapd" command
@@ -287,11 +309,11 @@ else
 			log "hostapd now works (built from source, installed to /usr/local/bin/hostapd)"
 			rm -rf "$HOSTAPD_BUILD_DIR"
 		else
-			log "warning: hostapd still does not run after attempting a from-source build — the WiFi hotspot fallback will not work until this is fixed. Build output kept at $HOSTAPD_BUILD_DIR/build.log for troubleshooting."
+			warn "hostapd still does not run after attempting a from-source build — the WiFi hotspot fallback will not work until this is fixed. Build output kept at $HOSTAPD_BUILD_DIR/build.log for troubleshooting."
 		fi
 	fi
 	if ! dnsmasq -v >/dev/null 2>&1; then
-		log "warning: dnsmasq is installed but fails to run — try 'pacman -S dnsmasq', or a full 'pacman -Syu' if that's not enough, then re-run install.sh. The WiFi hotspot fallback will not work until this is fixed."
+		warn "dnsmasq is installed but fails to run — try 'pacman -S dnsmasq', or a full 'pacman -Syu' if that's not enough, then re-run install.sh. The WiFi hotspot fallback will not work until this is fixed."
 	fi
 
 	# wpa_supplicant needs two global directives its own config file may
@@ -357,11 +379,11 @@ else
 		if systemctl is-active --quiet wpa_supplicant@wlan0.service; then
 			log "wpa_supplicant@wlan0.service is running"
 		else
-			log "warning: wpa_supplicant@wlan0.service is not running — the System page's Wireless scan/connect and the WiFi hotspot fallback (which hands wlan0 back to this service when tearing down the hotspot) will not work until this is fixed. Reason:"
+			warn "wpa_supplicant@wlan0.service is not running — the System page's Wireless scan/connect and the WiFi hotspot fallback (which hands wlan0 back to this service when tearing down the hotspot) will not work until this is fixed. Reason:"
 			journalctl -u wpa_supplicant@wlan0.service -n 10 --no-pager 2>/dev/null | sed 's/^/    /' || true
 		fi
 	else
-		log "warning: could not determine which config file wpa_supplicant@wlan0.service uses — if the System page's Wireless scan/connect fails with a ctrl_ifname or save_config error, add 'ctrl_interface=/run/wpa_supplicant' and 'update_config=1' to its config file manually and restart the service"
+		warn "could not determine which config file wpa_supplicant@wlan0.service uses — if the System page's Wireless scan/connect fails with a ctrl_ifname or save_config error, add 'ctrl_interface=/run/wpa_supplicant' and 'update_config=1' to its config file manually and restart the service"
 	fi
 fi
 
@@ -387,7 +409,7 @@ if [ -f /etc/named.conf ]; then
 			# An operator's own deliberate listen-on customization --
 			# rewriting that automatically is a bigger, riskier action
 			# than this feature warrants, so this only warns.
-			log "warning: named.conf already has its own active listen-on directive — not touching it automatically. If the WiFi hotspot fallback's dnsmasq ever fails with \"Address already in use\" for 10.42.0.1, add '!10.42.0.0/24;' to named's listen-on ACL in /etc/named.conf and restart named."
+			warn "named.conf already has its own active listen-on directive — not touching it automatically. If the WiFi hotspot fallback's dnsmasq ever fails with \"Address already in use\" for 10.42.0.1, add '!10.42.0.0/24;' to named's listen-on ACL in /etc/named.conf and restart named."
 		fi
 	elif grep -Eq '^[[:space:]]*options[[:space:]]*\{' /etc/named.conf; then
 		log "Restricting named's listen-on to exclude the WiFi hotspot fallback's own 10.42.0.0/24 subnet (BIND's own default \"listen on everything\" behavior would otherwise grab wlan0's hotspot address out from under dnsmasq)"
@@ -395,9 +417,9 @@ if [ -f /etc/named.conf ]; then
 		awk '{ print } /^[[:space:]]*options[[:space:]]*\{/ && !done { print "\tlisten-on { !10.42.0.0/24; any; };"; done=1 }' /etc/named.conf >/etc/named.conf.tmp
 		chmod "$NAMED_CONF_PERMS" /etc/named.conf.tmp
 		mv /etc/named.conf.tmp /etc/named.conf
-		systemctl restart named 2>/dev/null || log "warning: could not restart named after updating its config — restart it manually"
+		systemctl restart named 2>/dev/null || warn "could not restart named after updating its config — restart it manually"
 	else
-		log "warning: could not find an \"options { }\" block in /etc/named.conf to add a listen-on restriction — if the WiFi hotspot fallback's dnsmasq ever fails with \"Address already in use\" for 10.42.0.1, add 'listen-on { !10.42.0.0/24; any; };' to named's options block in /etc/named.conf manually and restart named"
+		warn "could not find an \"options { }\" block in /etc/named.conf to add a listen-on restriction — if the WiFi hotspot fallback's dnsmasq ever fails with \"Address already in use\" for 10.42.0.1, add 'listen-on { !10.42.0.0/24; any; };' to named's options block in /etc/named.conf manually and restart named"
 	fi
 fi
 
@@ -512,7 +534,7 @@ if [ -n "$PIPER_ARCH" ]; then
 			ln -sf "$PIPER_INSTALL_DIR/piper" /usr/local/bin/piper
 			log "Installed Piper to $PIPER_INSTALL_DIR (symlinked to /usr/local/bin/piper)"
 		else
-			log "warning: couldn't download Piper (offline?) — skipping. Re-run this script with network access to pick it up, or set up text-to-speech manually later."
+			warn "couldn't download Piper (offline?) — skipping. Re-run this script with network access to pick it up, or set up text-to-speech manually later."
 		fi
 		rm -rf "$TMP"
 	fi
@@ -526,7 +548,7 @@ if [ -n "$PIPER_ARCH" ]; then
 		if [ "$PIPER_CHECK_STATUS" = "0" ]; then
 			PIPER_READY=1
 		else
-			log "warning: Piper is installed but cannot run on this system; skipping text-to-speech voice setup."
+			warn "Piper is installed but cannot run on this system; skipping text-to-speech voice setup."
 			log "Piper check output: ${PIPER_CHECK_OUTPUT//$'\n'/ | }"
 			log "This is usually a glibc/libstdc++ version mismatch in older HamVoIP images."
 			log "The app will fall back to espeak-ng for \"Create from text\" where available."
@@ -549,7 +571,7 @@ if [ -n "$PIPER_ARCH" ]; then
 				log "Downloaded voice $PIPER_VOICE to $PIPER_VOICES_DIR (more voices at https://huggingface.co/rhasspy/piper-voices)"
 			else
 				rm -f "$PIPER_VOICES_DIR/$PIPER_VOICE.onnx.tmp" "$PIPER_VOICES_DIR/$PIPER_VOICE.onnx.json"
-				log "warning: couldn't download the default Piper voice (offline?) — the \"Create from text\" sound generator will show no voices until one is downloaded. Re-run this script with network access, or see https://huggingface.co/rhasspy/piper-voices"
+				warn "couldn't download the default Piper voice (offline?) — the \"Create from text\" sound generator will show no voices until one is downloaded. Re-run this script with network access, or see https://huggingface.co/rhasspy/piper-voices"
 			fi
 		fi
 	fi
@@ -605,7 +627,7 @@ else
 					pip3 install ruamel.yaml==0.15.100
 					log "Installed Python dependencies via bootstrapped pip"
 				else
-					log "warning: couldn't set up Python dependencies for SkywarnPlus -- install requests/python-dateutil/pydub/ruamel.yaml manually, see https://github.com/Mason10198/SkywarnPlus#installation"
+					warn "couldn't set up Python dependencies for SkywarnPlus -- install requests/python-dateutil/pydub/ruamel.yaml manually, see https://github.com/Mason10198/SkywarnPlus#installation"
 				fi
 				rm -rf "$TMP"
 			fi
@@ -625,7 +647,7 @@ else
 				log "Installed SkywarnPlus to $SKYWARN_DIR, scheduled via /etc/cron.d/SkywarnPlus (every 60s)"
 				log "Finish setup on the node's Automation tab: pick your county codes and register this node."
 			else
-				log "warning: couldn't download SkywarnPlus (offline?) -- re-run this script with network access to finish installing it."
+				warn "couldn't download SkywarnPlus (offline?) -- re-run this script with network access to finish installing it."
 			fi
 			rm -rf "$TMP"
 			;;
@@ -669,19 +691,26 @@ make build
 log "Deploying"
 ./deploy/install.sh "$REPO_ROOT/bin/hamvoip-gui"
 
-log "Done"
+# A single scannable close instead of a loose stack of paragraphs --
+# deploy/install.sh (just above) already printed the one precise,
+# IP-correct "visit this URL" line, so this deliberately doesn't repeat
+# a second, less accurate copy of it.
+echo
+printf '%s%s✓ Install complete%s\n' "$C_GREEN" "$C_BOLD" "$C_RESET"
+echo
 
-echo
-echo "This script has installed the HamVoIP GUI and its dependencies (already running via systemd)."
-echo "If you installed SkywarnPlus, finish its setup on the node's SkywarnPlus tab."
-echo
-echo
-if [ ! -d "$SKYWARN_DIR" ]; then
-    echo "You can re-run this script later to install SkywarnPlus."
+if [ "${#WARNINGS[@]}" -gt 0 ]; then
+	printf '%s%s%d item(s) need attention:%s\n' "$C_YELLOW" "$C_BOLD" "${#WARNINGS[@]}" "$C_RESET"
+	for w in "${WARNINGS[@]}"; do
+		printf '  %s-%s %s\n' "$C_YELLOW" "$C_RESET" "$w"
+	done
+	echo
 fi
-echo "You can re-run this script at any time to update the application to the latest version from git."
-echo
-echo "Visit http://<node-ip>:8088 in a browser to access the GUI."
-echo
-echo
+
+if [ -d "$SKYWARN_DIR" ]; then
+	echo "Finish SkywarnPlus setup on the node's Automation tab (pick your county codes and register this node)."
+else
+	echo "Tip: re-run this script anytime to also install SkywarnPlus (weather-alert automation)."
+fi
+echo "Re-run this script anytime to update to the latest version from git."
 echo
