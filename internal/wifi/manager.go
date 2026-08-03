@@ -2,6 +2,7 @@ package wifi
 
 import (
 	"context"
+	"log"
 	"sync"
 	"time"
 )
@@ -170,7 +171,11 @@ func (m *Manager) checkAndAct(ctx context.Context) {
 		m.mu.Lock()
 		m.lastHotspotAttempt = time.Now()
 		m.mu.Unlock()
-		if err := backend.StartHotspot(ctx, ssid, psk); err == nil {
+		log.Printf("wifi: no network connection detected — starting fallback hotspot %q via %s", ssid, backend.Name())
+		if err := backend.StartHotspot(ctx, ssid, psk); err != nil {
+			log.Printf("wifi: failed to start fallback hotspot: %v", err)
+		} else {
+			log.Printf("wifi: fallback hotspot %q is up", ssid)
 			cp := startCP(dashboardURL)
 			m.mu.Lock()
 			m.hotspotActive = true
@@ -178,7 +183,10 @@ func (m *Manager) checkAndAct(ctx context.Context) {
 			m.mu.Unlock()
 		}
 	case hasRoute && hotspotActive:
-		if err := backend.StopHotspot(ctx); err == nil {
+		log.Printf("wifi: network connection restored — tearing down fallback hotspot")
+		if err := backend.StopHotspot(ctx); err != nil {
+			log.Printf("wifi: failed to stop fallback hotspot: %v", err)
+		} else {
 			m.mu.Lock()
 			cp := m.captivePortal
 			m.hotspotActive = false

@@ -130,7 +130,9 @@ func (s *Server) StartCloudAgent(ctx context.Context) {
 // hotspot-fallback loop. Call once, from main, for the life of the
 // process.
 func (s *Server) StartWiFiWatchdog(ctx context.Context) {
-	s.wifiManager.SetBackend(wifi.DetectBackend(ctx))
+	backend := wifi.DetectBackend(ctx)
+	log.Printf("wifi: detected backend %q for the hotspot-fallback watchdog", backend.Name())
+	s.wifiManager.SetBackend(backend)
 	go s.wifiManager.Run(ctx)
 }
 
