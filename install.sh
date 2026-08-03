@@ -707,10 +707,15 @@ if [ "${#WARNINGS[@]}" -gt 0 ]; then
 	echo
 fi
 
-if [ -d "$SKYWARN_DIR" ]; then
+# Same check the install-decision step above uses ([ -x
+# ".../SkywarnPlus.py" ], not just [ -d "$SKYWARN_DIR" ]) -- so this
+# only offers the "re-run to install it" tip when it's actually not
+# installed (declined, no interactive terminal to ask, or a failed
+# download), never when it's already there.
+if [ -x "$SKYWARN_DIR/SkywarnPlus.py" ]; then
 	echo "Finish SkywarnPlus setup on the node's Automation tab (pick your county codes and register this node)."
 else
-	echo "Tip: re-run this script anytime to also install SkywarnPlus (weather-alert automation)."
+	echo "Tip: SkywarnPlus (weather-alert automation) was skipped -- re-run this script anytime to install it."
 fi
 echo "Re-run this script anytime to update to the latest version from git."
 echo
