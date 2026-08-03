@@ -2,6 +2,7 @@ package wifi
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -112,6 +113,42 @@ func (m *Manager) NotifyConnectAttempt() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.lastConnectAttempt = time.Now()
+}
+
+// Connect hands wlan0 over to ssid/psk, tearing down the fallback
+// hotspot first if it's currently active -- the one correct entry
+// point for an operator-requested connection. Calling
+// Backend().Connect() directly instead (as this method used to be
+// bypassed in favor of) starts wpa_supplicant on wlan0 without ever
+// stopping hostapd first, leaving both daemons fighting over the same
+// physical radio. Confirmed on a real node: that conflict knocked every
+// joined client off the hotspot and never actually completed the
+// requested connection either, leaving wlan0 stranded
+// (wpa_state=DISCONNECTED) until the watchdog's own next retry cycle
+// picked up the pieces minutes later. NotifyConnectAttempt's own grace
+// period is set here, before the (possibly slow) backend.Connect call,
+// so a watchdog tick landing mid-attempt can't race it and try to
+// stand the hotspot back up while this is still in flight.
+func (m *Manager) Connect(ctx context.Context, ssid, psk string) error {
+	m.mu.Lock()
+	backend := m.backend
+	hotspotActive := m.hotspotActive
+	cp := m.captivePortal
+	m.mu.Unlock()
+
+	if hotspotActive {
+		if err := backend.StopHotspot(ctx); err != nil {
+			return fmt.Errorf("tearing down fallback hotspot before connecting: %w", err)
+		}
+		cp.stop()
+		m.mu.Lock()
+		m.hotspotActive = false
+		m.captivePortal = nil
+		m.mu.Unlock()
+	}
+
+	m.NotifyConnectAttempt()
+	return backend.Connect(ctx, ssid, psk)
 }
 
 // Run blocks until ctx is cancelled, checking connectivity every

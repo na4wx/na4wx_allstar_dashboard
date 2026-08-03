@@ -69,10 +69,13 @@ func (s *Server) handleSystemWiFiConnect(w http.ResponseWriter, r *http.Request)
 	// overhead from several individual wpa_cli calls ahead of it.
 	ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
 	defer cancel()
-	if err := s.wifiManager.Backend().Connect(ctx, ssid, password); err != nil {
+	// Manager.Connect (not Backend().Connect() directly) so the fallback
+	// hotspot -- if it's the thing currently running on wlan0 -- gets
+	// torn down properly first. See Manager.Connect's own doc comment
+	// for why calling the backend directly is unsafe.
+	if err := s.wifiManager.Connect(ctx, ssid, password); err != nil {
 		s.renderSystemPage(w, r, flash("error", "Couldn't connect: "+err.Error()))
 		return
 	}
-	s.wifiManager.NotifyConnectAttempt()
-	s.renderSystemPage(w, r, flash("ok", `Sent connect request to "`+ssid+`". If this device was showing its fallback hotspot, that will drop automatically once the new connection is confirmed.`))
+	s.renderSystemPage(w, r, flash("ok", `Connected to "`+ssid+`".`))
 }
