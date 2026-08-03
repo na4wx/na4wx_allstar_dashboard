@@ -25,14 +25,16 @@ func (f *fakeBackend) StopHotspot(context.Context) error {
 	return f.stopErr
 }
 
-// newTestManager builds a Manager wired to a fakeBackend and a stubbed
-// hasRoute, so the state machine can be driven deterministically
-// without any real network state.
+// newTestManager builds a Manager wired to a fakeBackend and stubbed
+// hasRoute/startCaptivePortal, so the state machine can be driven
+// deterministically without any real network state or actually binding
+// port 80 on whatever machine runs the test suite.
 func newTestManager(hasRoute bool) (*Manager, *fakeBackend) {
 	fb := &fakeBackend{}
-	m := NewManager("test-ssid", "test-password", true)
+	m := NewManager("test-ssid", "test-password", "8088", true)
 	m.SetBackend(fb)
 	m.hasRoute = func(context.Context) (bool, error) { return hasRoute, nil }
+	m.startCaptivePortal = func(string) *captivePortal { return nil }
 	return m, fb
 }
 

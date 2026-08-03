@@ -168,11 +168,14 @@ func (s *Server) StartWiFiWatchdog(ctx context.Context) {
 // cloudagent.New's doc comment for why). cloudAuditLogPath is where
 // every action relayed through the cloud connection is independently
 // recorded — see internal/cloudagent's package doc. wifiHotspotSSID/
-// wifiHotspotPSK are this node's fixed fallback-hotspot credentials,
-// and wifiHotspotEnabled is the escape hatch that disables the
-// self-healing hotspot behavior entirely — see internal/wifi's
-// package doc and -wifi-hotspot-* in main.go.
-func New(store *config.Store, authMgr *auth.Manager, templatesFS, staticFS fs.FS, asteriskBin, asteriskLog, sa818Tool, sa818StatePath, nodeDBPath, nodeDBURL, soundsCustomDir, soundsStockDir, soxTool, soundSchedulePath, ttsTool, ttsVoicesDir, skywarnDir, wxTonesPath, cloudSettingsPath, cloudURLDefault, cloudAuditLogPath, wifiHotspotSSID, wifiHotspotPSK string, wifiHotspotEnabled bool) (*Server, error) {
+// wifiHotspotPSK are this node's fixed fallback-hotspot credentials
+// (wifiHotspotPSK == "" broadcasts it open), wifiDashboardPort is this
+// app's own -addr port (used to build the captive-portal redirect
+// target, see internal/wifi's package doc), and wifiHotspotEnabled is
+// the escape hatch that disables the self-healing hotspot behavior
+// entirely — see internal/wifi's package doc and -wifi-hotspot-* in
+// main.go.
+func New(store *config.Store, authMgr *auth.Manager, templatesFS, staticFS fs.FS, asteriskBin, asteriskLog, sa818Tool, sa818StatePath, nodeDBPath, nodeDBURL, soundsCustomDir, soundsStockDir, soxTool, soundSchedulePath, ttsTool, ttsVoicesDir, skywarnDir, wxTonesPath, cloudSettingsPath, cloudURLDefault, cloudAuditLogPath, wifiHotspotSSID, wifiHotspotPSK, wifiDashboardPort string, wifiHotspotEnabled bool) (*Server, error) {
 	// Built once and shared with cloudAgent below, rather than each
 	// layer constructing its own -- both are thin wrappers over the same
 	// on-disk state, so there's no reason for two separate instances.
@@ -180,7 +183,7 @@ func New(store *config.Store, authMgr *auth.Manager, templatesFS, staticFS fs.FS
 	soundScheduleStore := soundschedule.New(soundSchedulePath)
 	wxTonesStore := wxtone.New(wxTonesPath)
 
-	s := &Server{store: store, auth: authMgr, mux: http.NewServeMux(), asteriskBin: asteriskBin, asteriskLog: asteriskLog, sa818Tool: sa818Tool, sa818StatePath: sa818StatePath, history: newLinkHistory(), nodes: nodedb.New(nodeDBPath, nodeDBURL), sounds: soundsStore, soundSchedule: soundScheduleStore, ttsTool: ttsTool, ttsVoicesDir: ttsVoicesDir, skywarnDir: skywarnDir, wxTones: wxTonesStore, cloudAgent: cloudagent.New(cloudSettingsPath, cloudURLDefault, store, asteriskBin, soundsStore, soundScheduleStore, wxTonesStore, skywarnDir, sa818Tool, sa818StatePath, cloudAuditLogPath), cloudURLDefault: cloudURLDefault, wifiManager: wifi.NewManager(wifiHotspotSSID, wifiHotspotPSK, wifiHotspotEnabled)}
+	s := &Server{store: store, auth: authMgr, mux: http.NewServeMux(), asteriskBin: asteriskBin, asteriskLog: asteriskLog, sa818Tool: sa818Tool, sa818StatePath: sa818StatePath, history: newLinkHistory(), nodes: nodedb.New(nodeDBPath, nodeDBURL), sounds: soundsStore, soundSchedule: soundScheduleStore, ttsTool: ttsTool, ttsVoicesDir: ttsVoicesDir, skywarnDir: skywarnDir, wxTones: wxTonesStore, cloudAgent: cloudagent.New(cloudSettingsPath, cloudURLDefault, store, asteriskBin, soundsStore, soundScheduleStore, wxTonesStore, skywarnDir, sa818Tool, sa818StatePath, cloudAuditLogPath), cloudURLDefault: cloudURLDefault, wifiManager: wifi.NewManager(wifiHotspotSSID, wifiHotspotPSK, wifiDashboardPort, wifiHotspotEnabled)}
 	s.live = newLiveHub(s)
 	store.SetChangeHook(func(string) { s.restartNeeded.Store(true) })
 

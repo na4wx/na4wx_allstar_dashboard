@@ -66,8 +66,8 @@ type Backend interface {
 	Status(ctx context.Context) (Status, error)
 	// StartHotspot begins broadcasting ssid/psk as this node's own
 	// access point on wlan0, taking over from whatever client-mode
-	// association was active. psk must be non-empty — see
-	// ValidatePSK.
+	// association was active. psk == "" broadcasts it open (no
+	// password) — same convention as Connect.
 	StartHotspot(ctx context.Context, ssid, psk string) error
 	// StopHotspot ends the hotspot and hands wlan0 back to normal
 	// client-mode operation.

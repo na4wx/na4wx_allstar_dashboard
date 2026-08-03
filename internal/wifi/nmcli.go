@@ -14,6 +14,18 @@ import (
 // package always uses for its own fallback hotspot, so Status can tell
 // "we are the ones broadcasting this" apart from any access-point
 // connection the operator saved themselves.
+//
+// Captive-portal note: Manager's own :80 redirect (see
+// captive_portal.go) works over this backend the same as the
+// wpa_supplicant one -- but the wildcard DNS hijack that makes each
+// OS's captive-portal probe hostname (captive.apple.com,
+// connectivitycheck.android.com, ...) actually resolve to this node
+// isn't wired up here, since nmcli's own "device wifi hotspot" shared-
+// connection dnsmasq isn't configurable for that through the plain
+// nmcli command line the way wpa_hotspot.go's own hand-written dnsmasq
+// config is. A device joining an NM-backed hotspot may see a less
+// reliable (or absent) automatic sign-in popup as a result; browsing
+// straight to the dashboard's address still works either way.
 const nmcliHotspotConnName = "hamvoip-gui-hotspot"
 
 type nmcliBackend struct{}
@@ -148,18 +160,26 @@ func (b *nmcliBackend) Connect(ctx context.Context, ssid, psk string) error {
 	return nil
 }
 
+// StartHotspot broadcasts ssid on wlan0 as this node's own access
+// point. psk == "" broadcasts it open (no WPA2 protection) -- omitting
+// nmcli's own "password" argument entirely is confirmed to produce a
+// genuinely open network (wifi-sec.key-mgmt=none), not an
+// auto-generated password.
 func (b *nmcliBackend) StartHotspot(ctx context.Context, ssid, psk string) error {
 	if err := ValidateSSID(ssid); err != nil {
 		return err
 	}
-	if err := ValidatePSK(psk); err != nil {
-		return err
+	args := []string{"device", "wifi", "hotspot", "ifname", wlan0Iface, "con-name", nmcliHotspotConnName, "ssid", ssid}
+	if psk != "" {
+		if err := ValidatePSK(psk); err != nil {
+			return err
+		}
+		args = append(args, "password", psk)
 	}
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	var stderr bytes.Buffer
-	c := exec.CommandContext(ctx, "nmcli", "device", "wifi", "hotspot",
-		"ifname", wlan0Iface, "con-name", nmcliHotspotConnName, "ssid", ssid, "password", psk)
+	c := exec.CommandContext(ctx, "nmcli", args...)
 	c.Stderr = &stderr
 	if err := c.Run(); err != nil {
 		return fmt.Errorf("nmcli device wifi hotspot %q: %w: %s", ssid, err, stderr.String())

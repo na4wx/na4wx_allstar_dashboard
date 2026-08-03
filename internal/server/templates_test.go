@@ -50,7 +50,7 @@ func newTemplateTestServer(t *testing.T) *Server {
 		filepath.Join(dir, "sound-schedule.json"), "piper", filepath.Join(dir, "piper-voices"),
 		filepath.Join(dir, "skywarnplus"), filepath.Join(dir, "wx-tones.json"),
 		filepath.Join(dir, "cloud-agent.json"), "wss://cloud.example.invalid/agent", filepath.Join(dir, "cloud-actions.log"),
-		"hamvoip-gui-setup", "hamradio2m", true,
+		"NA4WX Allstar Dashboard", "", "8088", true,
 	)
 	if err != nil {
 		t.Fatalf("New: %v", err)

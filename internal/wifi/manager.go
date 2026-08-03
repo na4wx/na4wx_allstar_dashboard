@@ -39,10 +39,12 @@ type Manager struct {
 	backend            Backend
 	hotspotSSID        string
 	hotspotPSK         string
+	dashboardURL       string
 	enabled            bool
 	hotspotActive      bool
 	lastConnectAttempt time.Time
 	lastHotspotAttempt time.Time
+	captivePortal      *captivePortal
 
 	// hasRoute is defaultRouteExists by default -- overridable so tests
 	// can drive the state machine without real network state, same
@@ -50,6 +52,13 @@ type Manager struct {
 	// shape as system.listNetworkInterfaces vs its own exported
 	// ListNetworkInterfaces wrapper.
 	hasRoute func(context.Context) (bool, error)
+
+	// startCaptivePortal is the package-level startCaptivePortal func by
+	// default -- overridable for the same reason as hasRoute: without
+	// this, a test driving checkAndAct through a successful StartHotspot
+	// would actually try to bind real port 80 on whatever machine runs
+	// the test suite.
+	startCaptivePortal func(dashboardURL string) *captivePortal
 }
 
 // NewManager builds a Manager with backend = unavailableBackend{} --
@@ -57,14 +66,21 @@ type Manager struct {
 // (*server.Server).StartWiFiWatchdog), so constructing a Manager never
 // shells out, matching the same "constructing a Server in tests
 // doesn't shell out" reasoning already established for
-// StartLinkHistoryPoller.
-func NewManager(hotspotSSID, hotspotPSK string, enabled bool) *Manager {
+// StartLinkHistoryPoller. dashboardPort is this app's own -addr port
+// (e.g. "8088"), used to build the URL the captive-portal redirect
+// server (see captive_portal.go) points phones/laptops at once they
+// join the hotspot -- always http://hotspotStaticIP:<dashboardPort>/,
+// since that's the one address guaranteed reachable from a device that
+// just joined the hotspot and nothing else.
+func NewManager(hotspotSSID, hotspotPSK, dashboardPort string, enabled bool) *Manager {
 	return &Manager{
-		backend:     unavailableBackend{},
-		hotspotSSID: hotspotSSID,
-		hotspotPSK:  hotspotPSK,
-		enabled:     enabled,
-		hasRoute:    defaultRouteExists,
+		backend:            unavailableBackend{},
+		hotspotSSID:        hotspotSSID,
+		hotspotPSK:         hotspotPSK,
+		dashboardURL:       "http://" + hotspotStaticIP + ":" + dashboardPort + "/",
+		enabled:            enabled,
+		hasRoute:           defaultRouteExists,
+		startCaptivePortal: startCaptivePortal,
 	}
 }
 
@@ -127,6 +143,8 @@ func (m *Manager) checkAndAct(ctx context.Context) {
 	lastConnectAttempt := m.lastConnectAttempt
 	lastHotspotAttempt := m.lastHotspotAttempt
 	ssid, psk := m.hotspotSSID, m.hotspotPSK
+	dashboardURL := m.dashboardURL
+	startCP := m.startCaptivePortal
 	m.mu.Unlock()
 
 	if !enabled {
@@ -153,15 +171,20 @@ func (m *Manager) checkAndAct(ctx context.Context) {
 		m.lastHotspotAttempt = time.Now()
 		m.mu.Unlock()
 		if err := backend.StartHotspot(ctx, ssid, psk); err == nil {
+			cp := startCP(dashboardURL)
 			m.mu.Lock()
 			m.hotspotActive = true
+			m.captivePortal = cp
 			m.mu.Unlock()
 		}
 	case hasRoute && hotspotActive:
 		if err := backend.StopHotspot(ctx); err == nil {
 			m.mu.Lock()
+			cp := m.captivePortal
 			m.hotspotActive = false
+			m.captivePortal = nil
 			m.mu.Unlock()
+			cp.stop()
 		}
 	}
 }

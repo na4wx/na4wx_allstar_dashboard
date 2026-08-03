@@ -9,6 +9,7 @@ import (
 	"flag"
 	"io/fs"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -43,16 +44,25 @@ func main() {
 	cloudSettingsPath := flag.String("cloud-settings-file", "/etc/hamvoip-gui/cloud-agent.json", "path to store this node's cloud API key/enabled flag for the optional public cloud platform connection (see internal/cloudagent's package doc) — off until the operator opts in on the Cloud Sync settings card")
 	cloudURL := flag.String("cloud-url", "wss://api-allstar.na4wx.com/agent", "the one WebSocket URL this node will ever dial for the optional public cloud platform connection (see internal/cloudagent's package doc); fixed at build/deploy time, shown read-only on the Cloud Sync settings card and never operator-editable there — override only for local development/testing against a different cloud instance")
 	cloudAuditLog := flag.String("cloud-audit-log", "/var/log/hamvoip-gui/cloud-actions.log", "path to record every action the cloud connection relays to this device, independent of the cloud site's own records — see internal/cloudagent's package doc")
-	wifiHotspotSSID := flag.String("wifi-hotspot-ssid", "hamvoip-gui-setup", "SSID this node broadcasts as a fallback WiFi hotspot on wlan0 the moment it has no active network connection (neither Ethernet nor WiFi) — join this from a phone/laptop to reach this page and pick a real network. See internal/wifi's package doc.")
-	wifiHotspotPassword := flag.String("wifi-hotspot-password", "hamradio2m", "the fixed password for the fallback WiFi hotspot above (WPA2, 8-63 characters) — documented here and in the README rather than randomly generated, so an operator who can physically reach a node that's fallen off the network can always get back in without a console cable")
+	wifiHotspotSSID := flag.String("wifi-hotspot-ssid", "NA4WX Allstar Dashboard", "SSID this node broadcasts as a fallback WiFi hotspot on wlan0 the moment it has no active network connection (neither Ethernet nor WiFi) — join this from a phone/laptop to reach this page and pick a real network. See internal/wifi's package doc.")
+	wifiHotspotPassword := flag.String("wifi-hotspot-password", "", "password for the fallback WiFi hotspot above (WPA2, 8-63 characters); empty (the default) broadcasts it open with no password, relying on captive-portal detection (see internal/wifi's package doc) to guide a phone/laptop straight to this page rather than requiring anyone to know or look up a password first")
 	wifiHotspotEnabled := flag.Bool("wifi-hotspot-enabled", true, "automatically stand up the fallback WiFi hotspot on wlan0 when this node has no active network connection; set false to disable the self-healing hotspot behavior entirely (e.g. a node with no wlan0 hardware at all)")
 	flag.Parse()
 
 	if err := wifi.ValidateSSID(*wifiHotspotSSID); err != nil {
 		log.Fatalf("-wifi-hotspot-ssid: %v", err)
 	}
-	if err := wifi.ValidatePSK(*wifiHotspotPassword); err != nil {
-		log.Fatalf("-wifi-hotspot-password: %v", err)
+	if *wifiHotspotPassword != "" {
+		if err := wifi.ValidatePSK(*wifiHotspotPassword); err != nil {
+			log.Fatalf("-wifi-hotspot-password: %v", err)
+		}
+	}
+	// The captive-portal redirect server (see internal/wifi's package
+	// doc) needs just the port -addr listens on, to build the URL it
+	// points a phone/laptop at once they join the fallback hotspot.
+	_, wifiDashboardPort, err := net.SplitHostPort(*addr)
+	if err != nil {
+		log.Fatalf("-addr: %v", err)
 	}
 
 	templatesFS, err := fs.Sub(web.Templates, "templates")
@@ -77,7 +87,7 @@ func main() {
 
 	store := config.NewStore(*asteriskEtc)
 
-	srv, err := server.New(store, authMgr, templatesFS, staticFS, *asteriskBin, *asteriskLog, *sa818Tool, *sa818StatePath, *nodeDBPath, *nodeDBURL, *soundsCustomDir, *soundsStockDir, *soxTool, *soundSchedulePath, *ttsTool, *ttsVoicesDir, *skywarnDir, *wxTonesPath, *cloudSettingsPath, *cloudURL, *cloudAuditLog, *wifiHotspotSSID, *wifiHotspotPassword, *wifiHotspotEnabled)
+	srv, err := server.New(store, authMgr, templatesFS, staticFS, *asteriskBin, *asteriskLog, *sa818Tool, *sa818StatePath, *nodeDBPath, *nodeDBURL, *soundsCustomDir, *soundsStockDir, *soxTool, *soundSchedulePath, *ttsTool, *ttsVoicesDir, *skywarnDir, *wxTonesPath, *cloudSettingsPath, *cloudURL, *cloudAuditLog, *wifiHotspotSSID, *wifiHotspotPassword, wifiDashboardPort, *wifiHotspotEnabled)
 	if err != nil {
 		log.Fatalf("server: %v", err)
 	}
