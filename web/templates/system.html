@@ -1,6 +1,8 @@
 {{define "title"}}System{{end}}
 {{define "content"}}
+<h1>System</h1>
 
+<h2 class="section-heading">Network</h2>
 <div class="card">
   <div class="label-row">
     <h2 style="margin:0">Device name</h2>
@@ -25,17 +27,19 @@
   </div>
   {{if .NetError}}<p class="hint">Could not read live connection info: {{.NetError}}</p>{{end}}
   {{if .Interfaces}}
-  <table style="margin-top:0.75rem">
-    <thead><tr><th>Connection</th><th>Current address</th></tr></thead>
-    <tbody>
-      {{range .Interfaces}}
-      {{$name := .Name}}
-      {{range .Addresses}}
-      <tr><td>{{$name}}</td><td>{{.}}</td></tr>
-      {{end}}
-      {{end}}
-    </tbody>
-  </table>
+  <div class="table-scroll" style="margin-top:0.75rem">
+    <table>
+      <thead><tr><th>Connection</th><th>Current address</th></tr></thead>
+      <tbody>
+        {{range .Interfaces}}
+        {{$name := .Name}}
+        {{range .Addresses}}
+        <tr><td>{{$name}}</td><td>{{.}}</td></tr>
+        {{end}}
+        {{end}}
+      </tbody>
+    </table>
+  </div>
   {{end}}
 
   <form method="post" action="/system/network" style="margin-top:1rem">
@@ -128,36 +132,45 @@
   </form>
   {{end}}
 
-  <form method="post" action="/system/wifi/connect" style="margin-top:0.75rem; display:flex; gap:0.5rem; align-items:center">
-    <input type="text" name="ssid" placeholder="Network name (SSID)" required style="width:12rem">
-    <input type="password" name="password" placeholder="password (blank for open network)" style="width:12rem">
-    <button type="submit" class="btn">Connect</button>
+  <form method="post" action="/system/wifi/connect" class="row" style="margin-top:0.75rem; align-items:flex-end">
+    <div class="field" style="margin-bottom:0">
+      <input type="text" name="ssid" placeholder="Network name (SSID)" required>
+    </div>
+    <div class="field" style="margin-bottom:0">
+      <input type="password" name="password" placeholder="password (blank for open network)">
+    </div>
+    <div class="field" style="flex:none; margin-bottom:0">
+      <button type="submit" class="btn">Connect</button>
+    </div>
   </form>
 
   {{if .WiFiNetworks}}
-  <table style="margin-top:0.75rem">
-    <thead><tr><th>Network</th><th>Signal</th><th>Security</th><th></th></tr></thead>
-    <tbody>
-      {{range .WiFiNetworks}}
-      <tr>
-        <td>{{.SSID}}</td>
-        <td>{{.Signal}}%</td>
-        <td>{{.Security}}</td>
-        <td>
-          <form method="post" action="/system/wifi/connect" style="display:flex; gap:0.5rem; align-items:center">
-            <input type="hidden" name="ssid" value="{{.SSID}}">
-            <input type="password" name="password" placeholder="{{if eq .Security "Open"}}(no password){{else}}password{{end}}" style="width:10rem">
-            <button type="submit" class="btn">Connect</button>
-          </form>
-        </td>
-      </tr>
-      {{end}}
-    </tbody>
-  </table>
+  <div class="table-scroll" style="margin-top:0.75rem">
+    <table>
+      <thead><tr><th>Network</th><th>Signal</th><th>Security</th><th></th></tr></thead>
+      <tbody>
+        {{range .WiFiNetworks}}
+        <tr>
+          <td>{{.SSID}}</td>
+          <td>{{.Signal}}%</td>
+          <td>{{.Security}}</td>
+          <td>
+            <form method="post" action="/system/wifi/connect" style="display:flex; gap:0.5rem; align-items:center">
+              <input type="hidden" name="ssid" value="{{.SSID}}">
+              <input type="password" name="password" placeholder="{{if eq .Security "Open"}}(no password){{else}}password{{end}}" style="width:9rem; min-width:0">
+              <button type="submit" class="btn">Connect</button>
+            </form>
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
   {{end}}
   {{end}}
 </div>
 
+<h2 class="section-heading">Radio hardware</h2>
 {{range .EmptyRadioFiles}}
 <div class="card" style="border-color:var(--danger)">
   <div class="label-row">
@@ -178,26 +191,30 @@
     {{template "help" "Every USB sound-fob device configured across usbradio.conf and simpleusb.conf. Devices are created inline from a node's own page (Radio hardware section) — this is for adjusting an existing one's settings, or removing one that's no longer used."}}
   </div>
   {{if .RadioDevices}}
-  <table>
-    <thead><tr><th>Device</th><th>File</th><th>Used by</th><th></th></tr></thead>
-    <tbody>
-      {{range .RadioDevices}}
-      <tr>
-        <td>{{.Name}}</td>
-        <td>{{.File}}</td>
-        <td>{{if .UsedByNode}}node {{.UsedByNode}}{{else}}<span class="hint">not currently used</span>{{end}}</td>
-        <td>
-          <a class="btn" href="/system/radio/{{.File}}/{{.Name}}">Edit</a>
-          {{if not .UsedByNode}}
-          <form method="post" action="/system/radio/{{.File}}/{{.Name}}/delete" style="display:inline" data-confirm="Delete device {{.Name}} from {{.File}}? This cannot be undone." data-confirm-danger>
-            <button type="submit" class="danger">Delete</button>
-          </form>
-          {{end}}
-        </td>
-      </tr>
-      {{end}}
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Device</th><th>File</th><th>Used by</th><th></th></tr></thead>
+      <tbody>
+        {{range .RadioDevices}}
+        <tr>
+          <td>{{.Name}}</td>
+          <td>{{.File}}</td>
+          <td>{{if .UsedByNode}}node {{.UsedByNode}}{{else}}<span class="hint">not currently used</span>{{end}}</td>
+          <td>
+            <div style="display:flex; gap:0.5rem; flex-wrap:wrap">
+              <a class="btn" href="/system/radio/{{.File}}/{{.Name}}">Edit</a>
+              {{if not .UsedByNode}}
+              <form method="post" action="/system/radio/{{.File}}/{{.Name}}/delete" data-confirm="Delete device {{.Name}} from {{.File}}? This cannot be undone." data-confirm-danger>
+                <button type="submit" class="danger">Delete</button>
+              </form>
+              {{end}}
+            </div>
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
   {{else}}
   <p class="hint">No radio devices set up yet — add one from a node's page (Radio hardware section).</p>
   {{end}}
@@ -344,6 +361,7 @@
   {{end}}
 </div>
 
+<h2 class="section-heading">System control</h2>
 <div class="card">
   <h2>Restart options</h2>
   <div class="row">
@@ -423,6 +441,7 @@
   </form>
 </div>
 
+<h2 class="section-heading">Account</h2>
 <div class="card">
   <h2>Change your password</h2>
   <form method="post" action="/system/password">
@@ -446,6 +465,7 @@
   </form>
 </div>
 
+<h2 class="section-heading">Diagnostics</h2>
 <div class="card">
   <div class="label-row">
     <h2 style="margin:0">Recent technical messages</h2>

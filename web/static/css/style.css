@@ -618,6 +618,21 @@ table th { color: var(--text-dim); font-weight: 550; font-size: 0.86rem; }
   line-height: 1.6;
 }
 
+/* Groups a long page of otherwise-flat cards (e.g. System) into
+   labeled sections, so it reads as a handful of related settings
+   rather than one undifferentiated stack. Dimmer and smaller than a
+   card's own h2 -- this labels a *group* of cards, not a setting. */
+.section-heading {
+  font-size: 0.95rem;
+  font-weight: 650;
+  color: var(--text-dim);
+  letter-spacing: -0.01em;
+  margin: 2.5rem 0 0.85rem;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid var(--border);
+}
+.section-heading:first-child { margin-top: 0; }
+
 .app-footer {
   max-width: 1040px;
   margin: 0 auto;
@@ -666,6 +681,20 @@ table th { color: var(--text-dim); font-weight: 550; font-size: 0.86rem; }
   }
   header.topbar nav form { margin: 0.25rem 0 0; }
   header.topbar nav form button { width: 100%; }
+
+  /* A handful of buttons on this site carry a full sentence of label
+     text (e.g. "Add placeholder device & try to bring Asterisk up") --
+     fine on desktop, but the base button rule's white-space:nowrap
+     pushed them wider than a phone screen, overflowing the card and the
+     page itself instead of wrapping. Desktop keeps nowrap (unaffected
+     by this media query) since every button there already fits on one
+     line comfortably. */
+  button, .btn {
+    white-space: normal;
+    text-align: center;
+  }
+
+  .section-heading { margin-top: 2rem; }
 }
 
 /* Confirmation modal, replacing native confirm() so a prompt before a
