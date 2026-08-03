@@ -209,6 +209,15 @@ func dnsmasqConfContent() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "interface=%s\n", wlan0Iface)
 	b.WriteString("bind-interfaces\n")
+	// dnsmasq's own documented behavior: specifying interface= silently
+	// adds the loopback interface to its listen set too, regardless of
+	// what was actually asked for. Confirmed the hard way on a real
+	// node: that collided with named/BIND, which legitimately already
+	// owns 127.0.0.1:53 for the system's own local DNS resolution, and
+	// made dnsmasq fail to start with "Address already in use" even
+	// after wlan0's own address stopped conflicting.
+	// except-interface is dnsmasq's own documented override for this.
+	b.WriteString("except-interface=lo\n")
 	fmt.Fprintf(&b, "dhcp-range=%s,%s,255.255.255.0,24h\n", hotspotDHCPRangeLow, hotspotDHCPRangeHi)
 	fmt.Fprintf(&b, "dhcp-option=3,%s\n", hotspotStaticIP) // router
 	fmt.Fprintf(&b, "dhcp-option=6,%s\n", hotspotStaticIP) // DNS

@@ -79,3 +79,15 @@ func TestDnsmasqConfContent(t *testing.T) {
 		t.Errorf("dnsmasqConfContent() missing wildcard DNS hijack line %q, got:\n%s", want, got)
 	}
 }
+
+// TestDnsmasqConfContentExcludesLoopback is the direct regression test
+// for a real incident: dnsmasq's own documented behavior silently adds
+// the loopback interface to its listen set whenever interface= is
+// used, which collided with named/BIND's own legitimate 127.0.0.1:53
+// listener and made the hotspot's dnsmasq fail to start entirely.
+func TestDnsmasqConfContentExcludesLoopback(t *testing.T) {
+	got := dnsmasqConfContent()
+	if !strings.Contains(got, "except-interface=lo\n") {
+		t.Errorf("dnsmasqConfContent() missing except-interface=lo, got:\n%s", got)
+	}
+}
