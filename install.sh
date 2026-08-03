@@ -135,7 +135,15 @@ else
 		# development branch tip, for a reproducible build.
 		log "hostapd is missing or fails to run — building a minimal one from source with no OpenSSL dependency"
 		command -v gcc >/dev/null 2>&1 || { log "Installing base-devel"; pacman_install base-devel; }
-		command -v pkg-config >/dev/null 2>&1 || { log "Installing pkgconf"; pacman_install pkgconf; }
+		# The pkg-config *provider* package is named "pkgconf" on current
+		# mainline Arch but still "pkg-config" on this Arch Linux ARM
+		# image's own repos (confirmed on a real node: "pkgconf" doesn't
+		# exist there at all) -- same "try the common case, fall back"
+		# shape as the espeak-ng/espeak handling above.
+		if ! command -v pkg-config >/dev/null 2>&1; then
+			log "Installing pkgconf"
+			pacman_install pkgconf 2>/dev/null || { log "pkgconf package not found; trying pkg-config"; pacman_install pkg-config; }
+		fi
 		pkg-config --exists libnl-3.0 2>/dev/null || { log "Installing libnl"; pacman_install libnl; }
 
 		HOSTAPD_BUILD_DIR=$(mktemp -d)
