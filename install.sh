@@ -57,6 +57,31 @@ pacman_install() {
 	pacman -Sy --noconfirm --needed "$@"
 }
 
+# hostapd_runs checks whether a hostapd binary actually works, without
+# ever needing a real config file. Confirmed directly against a real
+# build's actual behavior: `hostapd -v` is NOT a "print version and
+# exit 0" flag -- hostapd prints its version banner unconditionally at
+# startup (regardless of which flag was passed) and then always exits 1
+# without a config file argument, even when the binary is completely
+# healthy. So checking hostapd's *exit code* can never distinguish a
+# working build from a broken one -- both exit 1. What differs is the
+# banner: a binary that fails to even start (e.g. a missing shared
+# library) never reaches the point of printing it, and its stderr says
+# so explicitly ("error while loading shared libraries: ... cannot open
+# shared object file") instead.
+hostapd_runs() {
+	# The "|| true" is load-bearing under this script's set -e: hostapd
+	# -v exits 1 even when it works fine (see the comment above), so
+	# without it this assignment itself would trip errexit and abort the
+	# whole script the first time this runs.
+	out=$("$1" -v 2>&1 || true)
+	case "$out" in
+	*"error while loading shared libraries"*) return 1 ;;
+	*"hostapd v"*) return 0 ;;
+	*) return 1 ;;
+	esac
+}
+
 command -v git >/dev/null 2>&1 || { log "Installing git"; pacman_install git; }
 command -v make >/dev/null 2>&1 || { log "Installing make"; pacman_install make; }
 command -v curl >/dev/null 2>&1 || { log "Installing curl"; pacman_install curl; }
@@ -111,8 +136,9 @@ else
 	# pacman_install alone wouldn't have reinstalled/fixed an
 	# already-"installed" but broken package, and this would otherwise
 	# fail completely silently until the watchdog actually needed the
-	# hotspot.
-	if ! hostapd -v >/dev/null 2>&1; then
+	# hotspot. See hostapd_runs's own comment for why this can't just
+	# check `hostapd -v`'s exit code.
+	if ! hostapd_runs hostapd; then
 		# Confirmed on a real Arch ARM node: the packaged hostapd (2.6-6,
 		# with a local package database stale enough that a plain
 		# reinstall couldn't fix it -- and a broader repo sync wasn't
@@ -257,7 +283,7 @@ else
 		# check (and internal/wifi's own hostapd invocations) pick the
 		# wrong binary. internal/wifi/wpa_hotspot.go's hostapdBinary()
 		# applies the same explicit-path-first preference at runtime.
-		if /usr/local/bin/hostapd -v >/dev/null 2>&1; then
+		if hostapd_runs /usr/local/bin/hostapd; then
 			log "hostapd now works (built from source, installed to /usr/local/bin/hostapd)"
 			rm -rf "$HOSTAPD_BUILD_DIR"
 		else
@@ -290,7 +316,14 @@ else
 		WPA_CONF=$(tr '\0' '\n' <"/proc/$WPA_PID/cmdline" | sed -n 's/^-c//p' | head -n1)
 	fi
 	if [ -z "$WPA_CONF" ]; then
-		WPA_CONF=$(systemctl cat wpa_supplicant@wlan0.service 2>/dev/null | sed -n 's/.*-c\([^ ]*wlan0\.conf\).*/\1/p' | head -n1)
+		# `systemctl cat` on a template unit instance prints the *raw*
+		# unit file with systemd's %I specifier still literal (e.g.
+		# "wpa_supplicant_custom-%I.conf") -- confirmed on a real node --
+		# so matching a literal "wlan0.conf" here never matches at all.
+		# Matches any -c<...>.conf path instead, then substitutes %i/%I
+		# with the actual instance name afterward.
+		WPA_CONF=$(systemctl cat wpa_supplicant@wlan0.service 2>/dev/null | sed -n 's/.*-c\([^ ]*\.conf\).*/\1/p' | head -n1)
+		WPA_CONF=$(printf '%s' "$WPA_CONF" | sed 's/%[iI]/wlan0/g')
 	fi
 	if [ -n "$WPA_CONF" ] && [ -f "$WPA_CONF" ]; then
 		WPA_CONF_ADDITIONS=""
@@ -308,7 +341,24 @@ else
 			} >"$WPA_CONF.tmp"
 			chmod "$WPA_CONF_PERMS" "$WPA_CONF.tmp"
 			mv "$WPA_CONF.tmp" "$WPA_CONF"
-			systemctl restart wpa_supplicant@wlan0.service || log "warning: could not restart wpa_supplicant@wlan0.service after updating its config — restart it manually"
+		fi
+		# Verifies the service is actually *running*, not just that
+		# `systemctl restart`/an already-configured file implies it is --
+		# confirmed the hard way on a real node: a config file with
+		# ctrl_interface/update_config already present but otherwise
+		# syntactically broken (an orphaned '}' with no matching
+		# 'network={') left wpa_supplicant permanently crash-looping with
+		# no warning at all from this script, since nothing here ever
+		# restarted it or checked whether it was even up.
+		if ! systemctl is-active --quiet wpa_supplicant@wlan0.service; then
+			systemctl restart wpa_supplicant@wlan0.service 2>/dev/null || true
+			sleep 1
+		fi
+		if systemctl is-active --quiet wpa_supplicant@wlan0.service; then
+			log "wpa_supplicant@wlan0.service is running"
+		else
+			log "warning: wpa_supplicant@wlan0.service is not running — the System page's Wireless scan/connect and the WiFi hotspot fallback (which hands wlan0 back to this service when tearing down the hotspot) will not work until this is fixed. Reason:"
+			journalctl -u wpa_supplicant@wlan0.service -n 10 --no-pager 2>/dev/null | sed 's/^/    /' || true
 		fi
 	else
 		log "warning: could not determine which config file wpa_supplicant@wlan0.service uses — if the System page's Wireless scan/connect fails with a ctrl_ifname or save_config error, add 'ctrl_interface=/run/wpa_supplicant' and 'update_config=1' to its config file manually and restart the service"
