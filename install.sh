@@ -113,7 +113,53 @@ else
 	# fail completely silently until the watchdog actually needed the
 	# hotspot.
 	if ! hostapd -v >/dev/null 2>&1; then
-		log "warning: hostapd is installed but fails to run (often a stale build linked against an old libssl) — try 'pacman -S hostapd', or a full 'pacman -Syu' if that's not enough, then re-run install.sh. The WiFi hotspot fallback will not work until this is fixed."
+		# Confirmed on a real Arch ARM node: the packaged hostapd (2.6-6,
+		# with a local package database stale enough that a plain
+		# reinstall couldn't fix it -- and a broader repo sync wasn't
+		# something to risk on a live node) was dynamically linked
+		# against libssl.so.1.1, which no longer existed once the
+		# system's own OpenSSL moved on to 3.x.
+		#
+		# Rather than depend on the OS's own hostapd package at all,
+		# build a minimal one directly from hostapd's own upstream
+		# source. Verified against the real hostapd/Makefile (not
+		# guessed): CONFIG_TLS defaults to "openssl" and links
+		# -lcrypto/-lssl unconditionally whenever it's left unset --
+		# even with EAP fully disabled, since that flag also selects the
+		# core WPA crypto backend, not just the EAP/TLS bits.
+		# CONFIG_TLS=internal is what actually avoids OpenSSL, using
+		# hostapd's own bundled AES/SHA1/MD5 implementations instead --
+		# all a plain WPA2-PSK access point (everything this feature
+		# needs; no EAP/WPS/RADIUS) ever uses anyway. Pinned to the
+		# latest tagged release (hostap_2_11) rather than a moving
+		# development branch tip, for a reproducible build.
+		log "hostapd is missing or fails to run — building a minimal one from source with no OpenSSL dependency"
+		command -v gcc >/dev/null 2>&1 || { log "Installing base-devel"; pacman_install base-devel; }
+		command -v pkg-config >/dev/null 2>&1 || { log "Installing pkgconf"; pacman_install pkgconf; }
+		pkg-config --exists libnl-3.0 2>/dev/null || { log "Installing libnl"; pacman_install libnl; }
+
+		HOSTAPD_BUILD_DIR=$(mktemp -d)
+		if git clone --quiet --depth 1 --branch hostap_2_11 https://w1.fi/hostap.git "$HOSTAPD_BUILD_DIR"; then
+			cat >"$HOSTAPD_BUILD_DIR/hostapd/.config" <<-'HOSTAPD_CONFIG'
+			CONFIG_DRIVER_NL80211=y
+			CONFIG_LIBNL32=y
+			CONFIG_TLS=internal
+			HOSTAPD_CONFIG
+			if make -C "$HOSTAPD_BUILD_DIR/hostapd" -j"$(nproc)" >"$HOSTAPD_BUILD_DIR/build.log" 2>&1; then
+				install -Dm755 "$HOSTAPD_BUILD_DIR/hostapd/hostapd" /usr/local/bin/hostapd
+			else
+				log "warning: building hostapd from source failed — see $HOSTAPD_BUILD_DIR/build.log for details. The WiFi hotspot fallback will not work until this is fixed."
+			fi
+		else
+			log "warning: could not fetch hostapd source (https://w1.fi/hostap.git) — check network access. The WiFi hotspot fallback will not work until this is fixed."
+		fi
+
+		if hostapd -v >/dev/null 2>&1; then
+			log "hostapd now works (built from source, installed to /usr/local/bin/hostapd)"
+			rm -rf "$HOSTAPD_BUILD_DIR"
+		else
+			log "warning: hostapd still does not run after attempting a from-source build — the WiFi hotspot fallback will not work until this is fixed. Build output kept at $HOSTAPD_BUILD_DIR/build.log for troubleshooting."
+		fi
 	fi
 	if ! dnsmasq -v >/dev/null 2>&1; then
 		log "warning: dnsmasq is installed but fails to run — try 'pacman -S dnsmasq', or a full 'pacman -Syu' if that's not enough, then re-run install.sh. The WiFi hotspot fallback will not work until this is fixed."
