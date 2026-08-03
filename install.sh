@@ -147,14 +147,71 @@ else
 		pkg-config --exists libnl-3.0 2>/dev/null || { log "Installing libnl"; pacman_install libnl; }
 
 		HOSTAPD_BUILD_DIR=$(mktemp -d)
-		if git clone --quiet --depth 1 --branch hostap_2_11 https://w1.fi/hostap.git "$HOSTAPD_BUILD_DIR"; then
-			cat >"$HOSTAPD_BUILD_DIR/hostapd/.config" <<-'HOSTAPD_CONFIG'
+
+		# Confirmed on a real armv7l HamVoIP node: this image's own
+		# linux-api-headers package (5.8-1, "any" architecture -- the
+		# exact same bytes regardless of which board/arch installs it)
+		# ships the *64-bit* ARM asm/sigcontext.h (its own comments say
+		# "AArch64 registers", 64-bit fields, and references the
+		# compiler builtin __uint128_t, which doesn't exist in a 32-bit
+		# ARM compilation) -- a real upstream packaging defect on this
+		# mirror, not something `pacman -S linux-api-headers` can fix
+		# (reinstalling pulled the identical bytes). Overriding just
+		# this one header for the build -- via CPATH, which gcc checks
+		# before its own default system include dirs -- sidesteps it
+		# without touching anything system-wide. Content below is the
+		# real, correct 32-bit ARM struct sigcontext from the upstream
+		# Linux kernel (arch/arm/include/uapi/asm/sigcontext.h) -- a
+		# stable, unchanged-in-years part of that architecture's signal
+		# ABI, so there's no meaningful version-mismatch risk in vendoring
+		# it here rather than fetching it fresh on every install.
+		HOSTAPD_HDR_OVERRIDE="$HOSTAPD_BUILD_DIR/arm-headers-override"
+		mkdir -p "$HOSTAPD_HDR_OVERRIDE/asm"
+		cat >"$HOSTAPD_HDR_OVERRIDE/asm/sigcontext.h" <<-'SIGCONTEXT_H'
+		/* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */
+		#ifndef _ASMARM_SIGCONTEXT_H
+		#define _ASMARM_SIGCONTEXT_H
+
+		/*
+		 * Signal context structure - contains all info to do with the state
+		 * before the signal handler was invoked.  Note: only add new entries
+		 * to the end of the structure.
+		 */
+		struct sigcontext {
+			unsigned long trap_no;
+			unsigned long error_code;
+			unsigned long oldmask;
+			unsigned long arm_r0;
+			unsigned long arm_r1;
+			unsigned long arm_r2;
+			unsigned long arm_r3;
+			unsigned long arm_r4;
+			unsigned long arm_r5;
+			unsigned long arm_r6;
+			unsigned long arm_r7;
+			unsigned long arm_r8;
+			unsigned long arm_r9;
+			unsigned long arm_r10;
+			unsigned long arm_fp;
+			unsigned long arm_ip;
+			unsigned long arm_sp;
+			unsigned long arm_lr;
+			unsigned long arm_pc;
+			unsigned long arm_cpsr;
+			unsigned long fault_address;
+		};
+
+		#endif
+		SIGCONTEXT_H
+
+		if git clone --quiet --depth 1 --branch hostap_2_11 https://w1.fi/hostap.git "$HOSTAPD_BUILD_DIR/hostap"; then
+			cat >"$HOSTAPD_BUILD_DIR/hostap/hostapd/.config" <<-'HOSTAPD_CONFIG'
 			CONFIG_DRIVER_NL80211=y
 			CONFIG_LIBNL32=y
 			CONFIG_TLS=internal
 			HOSTAPD_CONFIG
-			if make -C "$HOSTAPD_BUILD_DIR/hostapd" -j"$(nproc)" >"$HOSTAPD_BUILD_DIR/build.log" 2>&1; then
-				install -Dm755 "$HOSTAPD_BUILD_DIR/hostapd/hostapd" /usr/local/bin/hostapd
+			if CPATH="$HOSTAPD_HDR_OVERRIDE" make -C "$HOSTAPD_BUILD_DIR/hostap/hostapd" -j"$(nproc)" >"$HOSTAPD_BUILD_DIR/build.log" 2>&1; then
+				install -Dm755 "$HOSTAPD_BUILD_DIR/hostap/hostapd/hostapd" /usr/local/bin/hostapd
 			else
 				log "warning: building hostapd from source failed — see $HOSTAPD_BUILD_DIR/build.log for details. The WiFi hotspot fallback will not work until this is fixed."
 			fi
