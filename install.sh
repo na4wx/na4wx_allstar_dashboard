@@ -365,6 +365,42 @@ else
 	fi
 fi
 
+# --- named (BIND) vs. WiFi hotspot fallback subnet conflict -------------
+#
+# Confirmed on a real HamVoIP/Arch ARM node: named/BIND (installed
+# alongside this image already -- its own config, nothing to do with
+# this project) defaults to listen-on { any; } whenever no explicit
+# listen-on directive is active, and BIND's own default periodic
+# interface rescanning picks up newly-appeared addresses on ANY
+# interface -- including wlan0's static 10.42.0.1 the instant the
+# fallback hotspot assigns it (both backends use that same subnet by
+# convention -- NetworkManager's own built-in hotspot support defaults
+# to it too, see nmcli.go). That collided directly with the hotspot's
+# own dnsmasq trying to bind that same address for DHCP/DNS (needed for
+# captive-portal detection -- see internal/wifi's package doc), which
+# then failed outright with "Address already in use".
+if [ -f /etc/named.conf ]; then
+	if grep -Eq '^[[:space:]]*listen-on([[:space:]]|\{)' /etc/named.conf; then
+		if grep -q '10\.42\.0\.0/24' /etc/named.conf; then
+			log "named.conf already excludes the hotspot's 10.42.0.0/24 subnet from its listen-on ACL"
+		else
+			# An operator's own deliberate listen-on customization --
+			# rewriting that automatically is a bigger, riskier action
+			# than this feature warrants, so this only warns.
+			log "warning: named.conf already has its own active listen-on directive — not touching it automatically. If the WiFi hotspot fallback's dnsmasq ever fails with \"Address already in use\" for 10.42.0.1, add '!10.42.0.0/24;' to named's listen-on ACL in /etc/named.conf and restart named."
+		fi
+	elif grep -Eq '^[[:space:]]*options[[:space:]]*\{' /etc/named.conf; then
+		log "Restricting named's listen-on to exclude the WiFi hotspot fallback's own 10.42.0.0/24 subnet (BIND's own default \"listen on everything\" behavior would otherwise grab wlan0's hotspot address out from under dnsmasq)"
+		NAMED_CONF_PERMS=$(stat -c '%a' /etc/named.conf 2>/dev/null || echo 644)
+		awk '{ print } /^[[:space:]]*options[[:space:]]*\{/ && !done { print "\tlisten-on { !10.42.0.0/24; any; };"; done=1 }' /etc/named.conf >/etc/named.conf.tmp
+		chmod "$NAMED_CONF_PERMS" /etc/named.conf.tmp
+		mv /etc/named.conf.tmp /etc/named.conf
+		systemctl restart named 2>/dev/null || log "warning: could not restart named after updating its config — restart it manually"
+	else
+		log "warning: could not find an \"options { }\" block in /etc/named.conf to add a listen-on restriction — if the WiFi hotspot fallback's dnsmasq ever fails with \"Address already in use\" for 10.42.0.1, add 'listen-on { !10.42.0.0/24; any; };' to named's options block in /etc/named.conf manually and restart named"
+	fi
+fi
+
 version_ge() { # version_ge A B => A >= B
 	[ "$1" = "$2" ] && return 0
 	[ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -n1)" = "$2" ]
