@@ -29,7 +29,36 @@ const (
 	hotspotStaticCIDR   = hotspotStaticIP + "/24"
 	hotspotDHCPRangeLow = "10.42.0.10"
 	hotspotDHCPRangeHi  = "10.42.0.200"
+
+	// preferredHostapdPath is where install.sh installs a hostapd it
+	// had to build from source, when the OS-packaged one doesn't
+	// actually run (see install.sh's own hostapd-from-source section).
+	// Checked explicitly rather than relying on PATH ordering to prefer
+	// it automatically -- confirmed unreliable in practice on a real
+	// node: the bare "hostapd" command kept resolving to the still-
+	// broken packaged /usr/bin/hostapd even after a working one existed
+	// at this path.
+	preferredHostapdPath = "/usr/local/bin/hostapd"
 )
+
+// hostapdBinary returns preferredHostapdPath if it exists there,
+// otherwise "hostapd" for a normal PATH lookup -- covers both a node
+// whose packaged hostapd already works fine (no from-source build ever
+// needed) and one where install.sh had to build its own.
+func hostapdBinary() string {
+	return hostapdBinaryAt(preferredHostapdPath)
+}
+
+// hostapdBinaryAt is hostapdBinary's own logic, parameterized for
+// testability -- same "parameterized helper behind the real, fixed-path
+// public function" shape as system.listNetworkInterfaces vs its own
+// exported ListNetworkInterfaces wrapper.
+func hostapdBinaryAt(preferredPath string) string {
+	if fi, err := os.Stat(preferredPath); err == nil && !fi.IsDir() {
+		return preferredPath
+	}
+	return "hostapd"
+}
 
 func (b *wpaBackend) StartHotspot(ctx context.Context, ssid, psk string) error {
 	if err := ValidateSSID(ssid); err != nil {
@@ -38,7 +67,8 @@ func (b *wpaBackend) StartHotspot(ctx context.Context, ssid, psk string) error {
 	if err := ValidatePSK(psk); err != nil {
 		return err
 	}
-	if _, err := exec.LookPath("hostapd"); err != nil {
+	hostapdBin := hostapdBinary()
+	if _, err := exec.LookPath(hostapdBin); err != nil {
 		return fmt.Errorf("hostapd is not installed -- see install.sh")
 	}
 	if _, err := exec.LookPath("dnsmasq"); err != nil {
@@ -80,7 +110,7 @@ func (b *wpaBackend) StartHotspot(ctx context.Context, ssid, psk string) error {
 	if err := os.MkdirAll(filepath.Dir(hostapdPidPath), 0755); err != nil {
 		return fmt.Errorf("create %s: %w", filepath.Dir(hostapdPidPath), err)
 	}
-	if err := runCmd(ctx, 10*time.Second, "hostapd", "-B", "-P", hostapdPidPath, hostapdConfPath); err != nil {
+	if err := runCmd(ctx, 10*time.Second, hostapdBin, "-B", "-P", hostapdPidPath, hostapdConfPath); err != nil {
 		return fmt.Errorf("start hostapd: %w", err)
 	}
 	if err := runCmd(ctx, 10*time.Second, "dnsmasq", "--conf-file="+dnsmasqConfPath, "--pid-file="+dnsmasqPidPath); err != nil {

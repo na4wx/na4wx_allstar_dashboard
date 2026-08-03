@@ -250,7 +250,14 @@ else
 			log "warning: could not fetch hostapd source (https://w1.fi/hostap.git) — check network access. The WiFi hotspot fallback will not work until this is fixed."
 		fi
 
-		if hostapd -v >/dev/null 2>&1; then
+		# Checks the explicit install path, not the bare "hostapd" command
+		# -- confirmed unreliable on a real node: PATH resolved "hostapd"
+		# to the still-broken packaged /usr/bin/hostapd even after this
+		# build installed a working one to /usr/local/bin, which made this
+		# check (and internal/wifi's own hostapd invocations) pick the
+		# wrong binary. internal/wifi/wpa_hotspot.go's hostapdBinary()
+		# applies the same explicit-path-first preference at runtime.
+		if /usr/local/bin/hostapd -v >/dev/null 2>&1; then
 			log "hostapd now works (built from source, installed to /usr/local/bin/hostapd)"
 			rm -rf "$HOSTAPD_BUILD_DIR"
 		else
