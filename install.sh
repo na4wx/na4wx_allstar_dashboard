@@ -102,6 +102,23 @@ else
 	systemctl disable --now hostapd >/dev/null 2>&1 || true
 	systemctl disable --now dnsmasq >/dev/null 2>&1 || true
 
+	# `command -v` above only confirms the binary is *present* on PATH,
+	# not that it actually runs -- confirmed on a real Arch ARM node:
+	# hostapd was already installed but dynamically linked against
+	# libssl.so.1.1, which no longer existed after an OpenSSL upgrade
+	# elsewhere on the system, so it failed immediately on every launch
+	# with "error while loading shared libraries". `--needed` means
+	# pacman_install alone wouldn't have reinstalled/fixed an
+	# already-"installed" but broken package, and this would otherwise
+	# fail completely silently until the watchdog actually needed the
+	# hotspot.
+	if ! hostapd -v >/dev/null 2>&1; then
+		log "warning: hostapd is installed but fails to run (often a stale build linked against an old libssl) — try 'pacman -S hostapd', or a full 'pacman -Syu' if that's not enough, then re-run install.sh. The WiFi hotspot fallback will not work until this is fixed."
+	fi
+	if ! dnsmasq -v >/dev/null 2>&1; then
+		log "warning: dnsmasq is installed but fails to run — try 'pacman -S dnsmasq', or a full 'pacman -Syu' if that's not enough, then re-run install.sh. The WiFi hotspot fallback will not work until this is fixed."
+	fi
+
 	# wpa_supplicant needs two global directives its own config file may
 	# not have -- confirmed both missing on a real HamVoIP/Arch ARM node
 	# (its wpa_supplicant@wlan0.service ran against a plain
