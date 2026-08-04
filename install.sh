@@ -139,6 +139,13 @@ if systemctl is-active --quiet NetworkManager; then
 else
 	command -v hostapd >/dev/null 2>&1 || { log "Installing hostapd"; pacman_install hostapd; }
 	command -v dnsmasq >/dev/null 2>&1 || { log "Installing dnsmasq"; pacman_install dnsmasq; }
+	# Needed for the captive-portal redirect's iptables rule (see
+	# internal/wifi/captive_portal.go) -- confirmed on a real node:
+	# HamVoIP's own stock httpd already permanently owns port 80
+	# system-wide, so the redirect server can't bind it directly and
+	# instead relies on iptables to funnel just wlan0's own port-80
+	# traffic to its real port.
+	command -v iptables >/dev/null 2>&1 || { log "Installing iptables"; pacman_install iptables; }
 
 	# Both ship their own default systemd units/config -- explicitly
 	# disabled so they stay completely inert until internal/wifi's

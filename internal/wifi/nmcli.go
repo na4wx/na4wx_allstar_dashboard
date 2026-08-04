@@ -15,9 +15,11 @@ import (
 // "we are the ones broadcasting this" apart from any access-point
 // connection the operator saved themselves.
 //
-// Captive-portal note: Manager's own :80 redirect (see
-// captive_portal.go) works over this backend the same as the
-// wpa_supplicant one -- but the wildcard DNS hijack that makes each
+// Captive-portal note: Manager's own port-80 redirect (see
+// captive_portal.go -- an iptables rule scoped to wlan0, since
+// HamVoIP's own stock httpd already permanently owns :80 itself) works
+// over this backend the same as the wpa_supplicant one -- but the
+// wildcard DNS hijack that makes each
 // OS's captive-portal probe hostname (captive.apple.com,
 // connectivitycheck.android.com, ...) actually resolve to this node
 // isn't wired up here, since nmcli's own "device wifi hotspot" shared-
