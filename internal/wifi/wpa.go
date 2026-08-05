@@ -222,6 +222,19 @@ func (b *wpaBackend) Connect(ctx context.Context, ssid, psk string) error {
 		return err
 	}
 
+	// Removes a leftover static hotspot address before connecting, if
+	// one happens to still be on the interface. Confirmed on a real
+	// node: if this process restarted while the hotspot was active,
+	// Manager's own in-memory hotspotActive resets to false, so a later
+	// Connect() never goes through StopHotspot's own address flush --
+	// leaving wlan0 with BOTH the hotspot's static 10.42.0.1 and the
+	// newly-DHCP'd real address at once, which even made wpa_cli's own
+	// "status" report the wrong (hotspot) IP for the real connection.
+	// Best-effort and specific to just this one address, not a full
+	// flush, so it can never disturb an already-good address from an
+	// earlier Connect() to a different network.
+	_ = runIPCmd(ctx, "addr", "del", hotspotStaticCIDR, "dev", wlan0Iface)
+
 	idOut, err := runWpaCli(ctx, 10*time.Second, "add_network")
 	if err != nil {
 		return err

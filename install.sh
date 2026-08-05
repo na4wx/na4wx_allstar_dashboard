@@ -389,6 +389,29 @@ else
 				mv "$WPA_CONF.tmp" "$WPA_CONF"
 			fi
 		fi
+
+		# Ensures /run/wpa_supplicant exists before wpa_supplicant starts,
+		# on every boot -- confirmed on a real node: ctrl_interface=
+		# /run/wpa_supplicant was correctly set in the config, and
+		# wpa_supplicant started and even connected to a real network
+		# successfully, but never created that directory itself (no error
+		# logged either), permanently leaving wpa_cli unable to reach it
+		# ("Failed to connect to non-global ctrl_ifname"). /run is tmpfs,
+		# wiped on every boot, so a one-time mkdir here wouldn't survive a
+		# reboot -- a systemd drop-in using RuntimeDirectory= (systemd's
+		# own native mechanism for exactly this) is what actually persists.
+		WPA_DROPIN_DIR=/etc/systemd/system/wpa_supplicant@wlan0.service.d
+		WPA_DROPIN="$WPA_DROPIN_DIR/hamvoip-gui-runtime-directory.conf"
+		if [ ! -f "$WPA_DROPIN" ]; then
+			log "Adding a systemd override so /run/wpa_supplicant is created automatically on every boot"
+			mkdir -p "$WPA_DROPIN_DIR"
+			printf '[Service]\nRuntimeDirectory=wpa_supplicant\n' >"$WPA_DROPIN"
+			systemctl daemon-reload
+			systemctl restart wpa_supplicant@wlan0.service 2>/dev/null || true
+		else
+			log "systemd override for /run/wpa_supplicant already present"
+		fi
+
 		# Verifies the service is actually *running*, not just that
 		# `systemctl restart`/an already-configured file implies it is --
 		# confirmed the hard way on a real node: a config file with
