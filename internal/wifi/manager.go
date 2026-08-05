@@ -9,9 +9,14 @@ import (
 )
 
 const (
-	// wifiWatchdogInterval matches linkHistoryInterval's own interval
-	// choice in internal/server/linkhistory.go.
-	wifiWatchdogInterval = 30 * time.Second
+	// wifiWatchdogInterval is how often the watchdog checks connectivity.
+	// Kept well under the operator's own ~30s "time to get the hotspot
+	// back" expectation -- the tick interval alone eats into that
+	// budget (worst case, connectivity drops the instant after a tick
+	// fires, so the next check waits almost a full interval), and
+	// hostapd/dnsmasq startup plus the phone's own scan/associate/DHCP
+	// time still has to fit inside whatever's left over.
+	wifiWatchdogInterval = 15 * time.Second
 
 	// connectGracePeriod is how long after an explicit Connect() call
 	// the watchdog holds off flipping into hotspot mode even if no
