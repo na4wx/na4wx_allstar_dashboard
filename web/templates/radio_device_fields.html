@@ -153,7 +153,7 @@
 
 <div class="card">
   <h2>Audio levels</h2>
-  <p class="section-intro">Start around 500 for both and adjust by ear — too low sounds weak or unreadable, too high sounds distorted or overdriven. These only take effect after Asterisk restarts, not immediately on save: save your change, then use "Restart radio software" on the System page (a few seconds, doesn't reboot the whole device) to actually hear it, and repeat as needed.</p>
+  <p class="section-intro">Start around 500 for both and adjust by ear — too low sounds weak or unreadable, too high sounds distorted or overdriven. If this device has already been tuned once with simpleusb-tune-menu/radio-tune-menu, saving here also updates its own tuning file so these values stay authoritative. Either way, changes only take effect after Asterisk restarts, not immediately on save: save your change, then use "Restart radio software" on the System page (a few seconds, doesn't reboot the whole device) to actually hear it, and repeat as needed.</p>
   <div class="row">
     <div class="field">
       <div class="label-row">
@@ -174,7 +174,7 @@
     <div class="field">
       <div class="label-row">
         <label for="eeprom">USB device EEPROM</label>
-        {{template "help" "Most USB sound-fob radio interfaces (including SHARI) have an onboard EEPROM the driver reads its own copy of these two volume settings from every time Asterisk starts -- and by default, that overwrites whatever's set above, which is why a saved change here can otherwise appear to do nothing. Off (recommended for use with this page) makes the volumes above the ones actually used. Only turn this on if you specifically tune audio with simpleusb-tune-menu/radio-tune-menu instead and want its \"save\" to take effect."}}
+        {{template "help" "A separate app_rpt setting for the USB sound-fob interface's own onboard memory. Real-world testing on HamVoIP found this is NOT what determines whether the volumes above take effect -- that's handled automatically now (see this card's own note above). Leave at the default unless you have a specific reason to change it."}}
       </div>
       <select id="eeprom" name="eeprom">
         <option value="" {{if eq .EEPROM ""}}selected{{end}}>(not set -- driver default is On)</option>

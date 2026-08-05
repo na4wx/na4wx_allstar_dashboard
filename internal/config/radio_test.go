@@ -132,6 +132,77 @@ func TestPreEmphasisDeEmphasisPLFilterRoundTrip(t *testing.T) {
 	}
 }
 
+// TestSaveRadioDeviceUpdatesExistingTuneFile is the direct regression
+// test for a real incident: on real HamVoIP hardware, chan_simpleusb.c
+// actually loads live RXMixerSet/TXMixerSet from a separate per-device
+// "tune file" (simpleusb_tune_<name>.conf), not simpleusb.conf itself --
+// confirmed by editing that exact file on a real node and observing the
+// live value change after a restart. Saving a device whose tune file
+// already exists must mirror the new values into it too (using its own
+// txmixaset key name, not txmixerset), while leaving devstr and every
+// other field in that file untouched.
+func TestSaveRadioDeviceUpdatesExistingTuneFile(t *testing.T) {
+	s := newRadioTestStore(t, SimpleusbConfFile, testUsbradioConf)
+	tunePath := filepath.Join(s.dir, "simpleusb_tune_usb.conf")
+	tuneContent := "[usb]\ndevstr=1-1.3:1.0\nrxmixerset=700\ntxmixaset=200\ntxmixbset=300\ntxdsplvl=999\n"
+	if err := os.WriteFile(tunePath, []byte(tuneContent), 0644); err != nil {
+		t.Fatalf("write tune fixture: %v", err)
+	}
+
+	d, err := s.LoadRadioDevice(SimpleusbConfFile, "usb")
+	if err != nil {
+		t.Fatalf("LoadRadioDevice: %v", err)
+	}
+	d.RXMixerSet = "350"
+	d.TXMixerSet = "222"
+	if err := s.SaveRadioDevice(SimpleusbConfFile, d); err != nil {
+		t.Fatalf("SaveRadioDevice: %v", err)
+	}
+
+	got, err := os.ReadFile(tunePath)
+	if err != nil {
+		t.Fatalf("read tune file after save: %v", err)
+	}
+	tf, err := s.RawFile("simpleusb_tune_usb.conf")
+	if err != nil {
+		t.Fatalf("RawFile: %v", err)
+	}
+	if v, _ := tf.Get("usb", "rxmixerset"); v != "350" {
+		t.Errorf("tune file rxmixerset = %q, want 350 (raw file: %s)", v, got)
+	}
+	if v, _ := tf.Get("usb", "txmixaset"); v != "222" {
+		t.Errorf("tune file txmixaset = %q, want 222 (raw file: %s)", v, got)
+	}
+	if v, _ := tf.Get("usb", "devstr"); v != "1-1.3:1.0" {
+		t.Errorf("tune file devstr = %q, want unchanged 1-1.3:1.0 (raw file: %s)", v, got)
+	}
+	if v, _ := tf.Get("usb", "txmixbset"); v != "300" {
+		t.Errorf("tune file txmixbset = %q, want unchanged 300 (raw file: %s)", v, got)
+	}
+}
+
+// TestSaveRadioDeviceDoesNotCreateTuneFile guards the other half of the
+// same fix: this app must never create a device's tune file from
+// scratch, since it has no way to correctly generate devstr (a USB
+// bus-topology path specific to whichever physical port the device is
+// plugged into) -- a device that's never been tuned via
+// simpleusb-tune-menu should keep relying on the main conf file's own
+// RXMixerSet/TXMixerSet.
+func TestSaveRadioDeviceDoesNotCreateTuneFile(t *testing.T) {
+	s := newRadioTestStore(t, SimpleusbConfFile, testUsbradioConf)
+	d, err := s.LoadRadioDevice(SimpleusbConfFile, "usb")
+	if err != nil {
+		t.Fatalf("LoadRadioDevice: %v", err)
+	}
+	d.RXMixerSet = "350"
+	if err := s.SaveRadioDevice(SimpleusbConfFile, d); err != nil {
+		t.Fatalf("SaveRadioDevice: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(s.dir, "simpleusb_tune_usb.conf")); !os.IsNotExist(err) {
+		t.Fatalf("SaveRadioDevice must not create a tune file from scratch, stat err = %v", err)
+	}
+}
+
 func TestListRadioDevicesRejectsWrongFile(t *testing.T) {
 	s := newRadioTestStore(t, UsbradioConfFile, testUsbradioConf)
 	if _, err := s.ListRadioDevices("rpt.conf"); err == nil {

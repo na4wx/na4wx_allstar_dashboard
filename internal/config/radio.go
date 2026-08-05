@@ -1,6 +1,9 @@
 package config
 
-import "fmt"
+import (
+	"fmt"
+	"os"
+)
 
 // RadioFiles are the two USB sound-card radio interface drivers HamVoIP
 // supports; a node uses one or the other, never both, depending on
@@ -200,7 +203,74 @@ func (s *Store) SaveRadioDevice(file string, d *RadioDevice) error {
 		f.Set(d.Name, fld.key, v)
 	}
 
-	return s.save(file, f)
+	if err := s.save(file, f); err != nil {
+		return err
+	}
+	return s.updateTuneFileIfExists(file, d)
+}
+
+// tuneFileName returns the HamVoIP-specific per-device "tune file"
+// chan_simpleusb.c actually loads live RXMixerSet/TXMixerSet from --
+// confirmed directly on a real node, via its own Asterisk log
+// ("Loaded parameters from simpleusb_tune_usb.conf for device usb") and
+// by editing that exact file and observing the live value change after
+// a restart. This is a SEPARATE file from simpleusb.conf itself,
+// written by simpleusb-tune-menu's own "save" action, and confirmed to
+// use a different key name for the transmit level (txmixaset) than the
+// main conf file's own txmixerset. Only the SimpleusbConfFile case
+// above has been directly confirmed on real hardware; the
+// UsbradioConfFile filename is inferred by symmetry with chan_usbradio's
+// own documented "radio tune"/"radio-tune-menu" counterpart tool
+// (same driver family, same tune-menu design) and has NOT been
+// independently verified the way the SimpleUSB one was -- flag it if
+// it turns out wrong on real USBRADIO hardware.
+func tuneFileName(confFile, deviceName string) string {
+	switch confFile {
+	case SimpleusbConfFile:
+		return "simpleusb_tune_" + deviceName + ".conf"
+	case UsbradioConfFile:
+		return "usbradio_tune_" + deviceName + ".conf"
+	default:
+		return ""
+	}
+}
+
+// updateTuneFileIfExists mirrors RXMixerSet/TXMixerSet into the
+// device's own tune file (see tuneFileName's own doc comment) whenever
+// one already exists -- i.e. the operator has tuned this device at
+// least once via simpleusb-tune-menu/radio-tune-menu, which is what
+// creates that file (and its hardware-identifying devstr field) in the
+// first place. Deliberately never creates a new tune file from scratch:
+// this app has no way to correctly generate devstr (a USB
+// bus-topology path specific to whichever physical port the device is
+// plugged into), and writing one with a missing or wrong value risks
+// the driver failing to associate the file with the actual hardware at
+// all. A device that's never been tuned this way is expected to fall
+// back to the main conf file's own RXMixerSet/TXMixerSet, which
+// SaveRadioDevice already just wrote above.
+func (s *Store) updateTuneFileIfExists(confFile string, d *RadioDevice) error {
+	tuneName := tuneFileName(confFile, d.Name)
+	if tuneName == "" {
+		return nil
+	}
+	if _, err := os.Stat(s.path(tuneName)); err != nil {
+		return nil
+	}
+	tf, err := s.load(tuneName)
+	if err != nil {
+		return err
+	}
+	if d.RXMixerSet == "" {
+		tf.Delete(d.Name, "rxmixerset")
+	} else {
+		tf.Set(d.Name, "rxmixerset", d.RXMixerSet)
+	}
+	if d.TXMixerSet == "" {
+		tf.Delete(d.Name, "txmixaset")
+	} else {
+		tf.Set(d.Name, "txmixaset", d.TXMixerSet)
+	}
+	return s.save(tuneName, tf)
 }
 
 // DeleteRadioDevice removes a device stanza entirely.
