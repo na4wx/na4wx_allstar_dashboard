@@ -31,7 +31,7 @@ const (
 	defaultPeerType         = "friend"
 	defaultPeerContext      = "radio-secure"
 	defaultPeerHost         = "dynamic"
-	defaultPeerAuth         = "md5"
+	defaultPeerAuth         = "plaintext"
 )
 
 // defaultIfBlank returns def when v is blank. This exists because of a

@@ -38,7 +38,7 @@ func TestDefaultNodePeer(t *testing.T) {
 	if p.Host != "dynamic" {
 		t.Errorf("Host = %q, want dynamic", p.Host)
 	}
-	if p.Auth != "md5" {
-		t.Errorf("Auth = %q, want md5", p.Auth)
+	if p.Auth != "plaintext" {
+		t.Errorf("Auth = %q, want plaintext", p.Auth)
 	}
 }

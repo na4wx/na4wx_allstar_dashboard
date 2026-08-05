@@ -534,13 +534,13 @@
       <div class="field">
         <div class="label-row">
           <label for="peer_auth">Password check method</label>
-          {{template "help" "How the password above is verified. md5 is the common default; use whatever AllStarLink support tells you if you're unsure."}}
+          {{template "help" "How the password above is verified. plaintext is the default here; use whatever AllStarLink support tells you if you're unsure."}}
         </div>
         <select id="peer_auth" name="peer_auth">
           <option value="" {{if and .Peer (eq .Peer.Auth "")}}selected{{end}}>(not set)</option>
-          <option value="md5" {{if or (not .Peer) (eq .Peer.Auth "md5")}}selected{{end}}>md5 (common default)</option>
+          <option value="md5" {{if and .Peer (eq .Peer.Auth "md5")}}selected{{end}}>md5</option>
           <option value="rsa" {{if and .Peer (eq .Peer.Auth "rsa")}}selected{{end}}>rsa</option>
-          <option value="plaintext" {{if and .Peer (eq .Peer.Auth "plaintext")}}selected{{end}}>plaintext</option>
+          <option value="plaintext" {{if or (not .Peer) (eq .Peer.Auth "plaintext")}}selected{{end}}>plaintext (default)</option>
         </select>
       </div>
     </div>
