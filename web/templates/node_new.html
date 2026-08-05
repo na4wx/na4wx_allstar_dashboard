@@ -32,11 +32,11 @@
         {{template "help" "Controls whether this acts as a full repeater (receive and transmit at the same time, with status beeps) or a simpler simplex setup. If you're not sure, \"full repeater\" is the normal choice."}}
       </div>
       <select id="duplex" name="duplex">
-        <option value="1" {{if or (eq .Duplex "") (eq .Duplex "1")}}selected{{end}}>Full repeater — normal setup, with status tones</option>
         <option value="0" {{if eq .Duplex "0"}}selected{{end}}>Simplex — one frequency, no status tones</option>
-        <option value="4" {{if eq .Duplex "4"}}selected{{end}}>Simplex — one frequency, with status tones</option>
-        <option value="2" {{if eq .Duplex "2"}}selected{{end}}>Full repeater — quieter (fewer status tones)</option>
-        <option value="3" {{if eq .Duplex "3"}}selected{{end}}>Full repeater — silent (no status tones at all)</option>
+        <option value="1" {{if eq .Duplex "1"}}selected{{end}}>Simplex — one frequency, with status tones</option>
+        <option value="2" {{if or (eq .Duplex "") (eq .Duplex "2")}}selected{{end}}>Full repeater — normal setup, with status tones</option>
+        <option value="3" {{if eq .Duplex "3"}}selected{{end}}>Full repeater — with status tones, but doesn't repeat audio</option>
+        <option value="4" {{if eq .Duplex "4"}}selected{{end}}>Full repeater — normal setup, but no repeat during autopatch calls</option>
       </select>
     </div>
 

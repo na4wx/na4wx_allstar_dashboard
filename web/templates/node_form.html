@@ -138,11 +138,11 @@
         </div>
         <select id="duplex" name="duplex">
           <option value="" {{if eq .Node.Duplex ""}}selected{{end}}>(not set)</option>
-          <option value="1" {{if eq .Node.Duplex "1"}}selected{{end}}>Full repeater — normal setup, with status tones</option>
           <option value="0" {{if eq .Node.Duplex "0"}}selected{{end}}>Simplex — one frequency, no status tones</option>
-          <option value="4" {{if eq .Node.Duplex "4"}}selected{{end}}>Simplex — one frequency, with status tones</option>
-          <option value="2" {{if eq .Node.Duplex "2"}}selected{{end}}>Full repeater — quieter (fewer status tones)</option>
-          <option value="3" {{if eq .Node.Duplex "3"}}selected{{end}}>Full repeater — silent (no status tones at all)</option>
+          <option value="1" {{if eq .Node.Duplex "1"}}selected{{end}}>Simplex — one frequency, with status tones</option>
+          <option value="2" {{if eq .Node.Duplex "2"}}selected{{end}}>Full repeater — normal setup, with status tones</option>
+          <option value="3" {{if eq .Node.Duplex "3"}}selected{{end}}>Full repeater — with status tones, but doesn't repeat audio</option>
+          <option value="4" {{if eq .Node.Duplex "4"}}selected{{end}}>Full repeater — normal setup, but no repeat during autopatch calls</option>
         </select>
       </div>
     </div>

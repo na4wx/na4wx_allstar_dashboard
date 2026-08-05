@@ -72,7 +72,15 @@ func defaultNodeIDRecording(callsign string) string {
 // whose failure mode stays off the air is the safer starting point, and
 // either way it's one click to change on the node's own page afterward.
 func (s *Server) handleNodeNewForm(w http.ResponseWriter, r *http.Request) {
-	data := nodeNewFormData{pageData: pageData{LoggedIn: true}, Duplex: "1", Interface: radioInterfaceShari}
+	// Duplex "2" is the real app_rpt value for a normal full-duplex
+	// repeater with status tones (verified against AllStarLink's own
+	// rpt.conf documentation) -- confirmed the hard way that "1" (this
+	// default's own value until now) is actually half-duplex/simplex
+	// with no repeated audio at all, silently handing every new node
+	// created via this wizard the wrong mode unless the operator happened
+	// to change this dropdown themselves. See node_form.html's own
+	// duplex select for the full, corrected value/label mapping.
+	data := nodeNewFormData{pageData: pageData{LoggedIn: true}, Duplex: "2", Interface: radioInterfaceShari}
 	s.detectRadioDevice(&data)
 	s.render(w, "node_new.html", data)
 }
