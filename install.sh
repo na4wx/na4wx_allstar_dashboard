@@ -354,22 +354,40 @@ else
 		WPA_CONF=$(systemctl cat wpa_supplicant@wlan0.service 2>/dev/null | sed -n 's/.*-c\([^ ]*\.conf\).*/\1/p' | head -n1)
 		WPA_CONF=$(printf '%s' "$WPA_CONF" | sed 's/%[iI]/wlan0/g')
 	fi
-	if [ -n "$WPA_CONF" ] && [ -f "$WPA_CONF" ]; then
-		WPA_CONF_ADDITIONS=""
-		grep -q '^ctrl_interface=' "$WPA_CONF" || WPA_CONF_ADDITIONS="${WPA_CONF_ADDITIONS}ctrl_interface=/run/wpa_supplicant\nctrl_interface_group=0\n"
-		grep -q '^update_config=' "$WPA_CONF" || WPA_CONF_ADDITIONS="${WPA_CONF_ADDITIONS}update_config=1\n"
-		if [ -z "$WPA_CONF_ADDITIONS" ]; then
-			log "wpa_supplicant ctrl_interface/update_config already configured in $WPA_CONF"
+	if [ -n "$WPA_CONF" ]; then
+		if [ ! -f "$WPA_CONF" ]; then
+			# A genuinely fresh node: the unit is correctly configured to
+			# read this file, but nothing ever created it. Confirmed on a
+			# real node: /etc/wpa_supplicant/ was completely empty, and
+			# wpa_supplicant@wlan0.service was already sitting in a
+			# "failed" state for exactly that reason -- wpa_supplicant
+			# itself refuses to start with no config file to read at all,
+			# so there was never a running process for the pgrep check
+			# above to find either. A config with just these two global
+			# directives and no network={} blocks is completely valid --
+			# wpa_supplicant starts fine with zero configured networks,
+			# ready for the System page's own Connect flow to add one.
+			log "Creating $WPA_CONF (none exists yet) with ctrl_interface/update_config so the System page's Wireless scan/connect can talk to and persist changes via wpa_supplicant"
+			mkdir -p "$(dirname "$WPA_CONF")"
+			printf 'ctrl_interface=/run/wpa_supplicant\nctrl_interface_group=0\nupdate_config=1\n' >"$WPA_CONF"
+			chmod 600 "$WPA_CONF"
 		else
-			log "Adding ctrl_interface/update_config to $WPA_CONF so the System page's Wireless scan/connect can talk to and persist changes via wpa_supplicant"
-			WPA_CONF_PERMS=$(stat -c '%a' "$WPA_CONF" 2>/dev/null || echo 600)
-			{
-				printf '%b' "$WPA_CONF_ADDITIONS"
-				printf '\n'
-				cat "$WPA_CONF"
-			} >"$WPA_CONF.tmp"
-			chmod "$WPA_CONF_PERMS" "$WPA_CONF.tmp"
-			mv "$WPA_CONF.tmp" "$WPA_CONF"
+			WPA_CONF_ADDITIONS=""
+			grep -q '^ctrl_interface=' "$WPA_CONF" || WPA_CONF_ADDITIONS="${WPA_CONF_ADDITIONS}ctrl_interface=/run/wpa_supplicant\nctrl_interface_group=0\n"
+			grep -q '^update_config=' "$WPA_CONF" || WPA_CONF_ADDITIONS="${WPA_CONF_ADDITIONS}update_config=1\n"
+			if [ -z "$WPA_CONF_ADDITIONS" ]; then
+				log "wpa_supplicant ctrl_interface/update_config already configured in $WPA_CONF"
+			else
+				log "Adding ctrl_interface/update_config to $WPA_CONF so the System page's Wireless scan/connect can talk to and persist changes via wpa_supplicant"
+				WPA_CONF_PERMS=$(stat -c '%a' "$WPA_CONF" 2>/dev/null || echo 600)
+				{
+					printf '%b' "$WPA_CONF_ADDITIONS"
+					printf '\n'
+					cat "$WPA_CONF"
+				} >"$WPA_CONF.tmp"
+				chmod "$WPA_CONF_PERMS" "$WPA_CONF.tmp"
+				mv "$WPA_CONF.tmp" "$WPA_CONF"
+			fi
 		fi
 		# Verifies the service is actually *running*, not just that
 		# `systemctl restart`/an already-configured file implies it is --
