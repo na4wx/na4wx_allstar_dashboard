@@ -138,7 +138,7 @@ func (s *Server) handleRadioSave(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	s.renderSystemPage(w, r, flash("ok", "Saved device "+name+" ("+file+")."))
+	s.renderSystemPage(w, r, flash("ok", "Saved device "+name+" ("+file+"). Audio levels and other settings here only take effect after Asterisk restarts -- use \"Restart radio software\" on the System page to apply and hear the change."))
 }
 
 func (s *Server) handleRadioDelete(w http.ResponseWriter, r *http.Request) {
