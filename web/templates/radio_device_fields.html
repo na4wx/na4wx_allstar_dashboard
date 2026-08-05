@@ -170,6 +170,19 @@
       <input type="number" id="txmixerset" name="txmixerset" min="0" max="999" value="{{.TXMixerSet}}" placeholder="500">
     </div>
   </div>
+  <div class="row">
+    <div class="field">
+      <div class="label-row">
+        <label for="eeprom">USB device EEPROM</label>
+        {{template "help" "Most USB sound-fob radio interfaces (including SHARI) have an onboard EEPROM the driver reads its own copy of these two volume settings from every time Asterisk starts -- and by default, that overwrites whatever's set above, which is why a saved change here can otherwise appear to do nothing. Off (recommended for use with this page) makes the volumes above the ones actually used. Only turn this on if you specifically tune audio with simpleusb-tune-menu/radio-tune-menu instead and want its \"save\" to take effect."}}
+      </div>
+      <select id="eeprom" name="eeprom">
+        <option value="" {{if eq .EEPROM ""}}selected{{end}}>(not set -- driver default is On)</option>
+        <option value="0" {{if eq .EEPROM "0"}}selected{{end}}>Off (recommended -- volumes above take effect)</option>
+        <option value="1" {{if eq .EEPROM "1"}}selected{{end}}>On (device's own stored levels override the above)</option>
+      </select>
+    </div>
+  </div>
 </div>
 
 <div class="card">

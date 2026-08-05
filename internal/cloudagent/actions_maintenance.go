@@ -64,6 +64,9 @@ func placeholderRadioDevice(name string) *config.RadioDevice {
 		TXPrelim:    "yes",
 		RXMixerSet:  "500",
 		TXMixerSet:  "500",
+		// Off, so these placeholder levels are actually the ones used --
+		// see RadioDevice.EEPROM's own doc comment.
+		EEPROM: "0",
 	}
 }
 

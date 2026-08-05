@@ -34,6 +34,17 @@ type RadioDevice struct {
 	TXMixerSet     string `json:"txMixerSet"`     // 0-999 transmit volume
 	RXBoost        string `json:"rxBoost"`        // 0 | 1 — confirmed present on a real simpleusb.conf, not usbradio-only as once assumed here
 
+	// EEPROM controls whether chan_usbradio/chan_simpleusb overwrites
+	// RXMixerSet/TXMixerSet (and TXMixB) from the USB sound-fob's own
+	// onboard EEPROM every time the channel loads — confirmed directly
+	// against chan_simpleusb.c: whenever this isn't explicitly "0" (the
+	// driver's own default is enabled), the conf file's audio-level
+	// values are silently discarded and replaced with whatever's stored
+	// on the device the moment Asterisk starts, which is exactly why
+	// editing RXMixerSet/TXMixerSet here can appear to do nothing at
+	// all. "0" makes the values on this page authoritative.
+	EEPROM string `json:"eeprom"` // 0 | 1
+
 	// PreEmphasis/DeEmphasis/PLFilter key names are inferred from the
 	// simpleusb-tune-menu tool's on-screen labels ("PRE-emphasis",
 	// "DE-emphasis", "PLfilter") rather than directly confirmed on a
@@ -62,6 +73,7 @@ var radioDeviceFields = []struct {
 	{"rxmixerset", func(d *RadioDevice) *string { return &d.RXMixerSet }},
 	{"txmixerset", func(d *RadioDevice) *string { return &d.TXMixerSet }},
 	{"rxboost", func(d *RadioDevice) *string { return &d.RXBoost }},
+	{"eeprom", func(d *RadioDevice) *string { return &d.EEPROM }},
 	{"preemphasis", func(d *RadioDevice) *string { return &d.PreEmphasis }},
 	{"deemphasis", func(d *RadioDevice) *string { return &d.DeEmphasis }},
 	{"plfilter", func(d *RadioDevice) *string { return &d.PLFilter }},
@@ -85,6 +97,14 @@ func isRadioFile(file string) bool {
 // does NOT touch the SA818 radio module itself (frequency, CTCSS,
 // squelch, transmit power) — that's programmed separately over a
 // serial connection, not stored in this config file.
+//
+// EEPROM="0" is the one field here NOT sourced from either write-up
+// above -- added separately after confirming directly against
+// chan_simpleusb.c that the driver silently overwrites RXMixerSet/
+// TXMixerSet from the USB fob's own onboard EEPROM on every load
+// unless this is explicitly off, which would otherwise make this
+// preset's audio-level fields (and any later edit to them) appear to
+// do nothing on real SHARI hardware, which typically has one.
 func ApplyShariUSBPreset(d *RadioDevice) {
 	d.CarrierFrom = "usbinvert"
 	d.CTCSSFrom = "no"
@@ -92,6 +112,7 @@ func ApplyShariUSBPreset(d *RadioDevice) {
 	d.PreEmphasis = "1"
 	d.DeEmphasis = "1"
 	d.PLFilter = "1"
+	d.EEPROM = "0"
 }
 
 // nonDeviceSections lists stanza names that show up in

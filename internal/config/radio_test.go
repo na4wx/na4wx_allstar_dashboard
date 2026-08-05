@@ -99,6 +99,14 @@ func TestApplyShariUSBPresetOverwritesOnlyDocumentedFields(t *testing.T) {
 	if d.Name != "usb" {
 		t.Fatalf("preset should not touch device name, got: %+v", d)
 	}
+	// Direct regression test for a real incident: on real SHARI hardware,
+	// chan_simpleusb silently overwrites RXMixerSet/TXMixerSet from the
+	// USB fob's own onboard EEPROM on every load unless EEPROM is
+	// explicitly off, making a saved audio-level change appear to do
+	// nothing at all.
+	if d.EEPROM != "0" {
+		t.Fatalf("preset should turn off EEPROM so audio levels actually take effect, got: %+v", d)
+	}
 }
 
 func TestPreEmphasisDeEmphasisPLFilterRoundTrip(t *testing.T) {
@@ -118,6 +126,9 @@ func TestPreEmphasisDeEmphasisPLFilterRoundTrip(t *testing.T) {
 	}
 	if got.PreEmphasis != "1" || got.DeEmphasis != "1" || got.PLFilter != "1" {
 		t.Fatalf("fields did not round-trip: %+v", got)
+	}
+	if got.EEPROM != "0" {
+		t.Fatalf("EEPROM did not round-trip: %+v", got)
 	}
 }
 

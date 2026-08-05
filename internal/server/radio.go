@@ -85,6 +85,7 @@ func radioDeviceFromForm(r *http.Request, name string) *config.RadioDevice {
 		RXMixerSet:     r.FormValue("rxmixerset"),
 		TXMixerSet:     r.FormValue("txmixerset"),
 		RXBoost:        r.FormValue("rxboost"),
+		EEPROM:         r.FormValue("eeprom"),
 		PreEmphasis:    r.FormValue("preemphasis"),
 		DeEmphasis:     r.FormValue("deemphasis"),
 		PLFilter:       r.FormValue("plfilter"),

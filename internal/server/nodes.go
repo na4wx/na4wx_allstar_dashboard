@@ -223,7 +223,13 @@ func (s *Server) newNodeFormData(n *config.Node) nodeFormData {
 		IDTimeMinutes: idTimeToMinutes(n.IDTime),
 		RadioMode:     "existing",
 		RadioDevices:  s.loadRadioChannelOptions(),
-		Device:        &config.RadioDevice{},
+		// EEPROM defaults to off for a brand-new device -- otherwise
+		// chan_usbradio/chan_simpleusb's own default (EEPROM enabled)
+		// would silently override whatever RXMixerSet/TXMixerSet the
+		// operator sets on this very form the moment Asterisk starts,
+		// making them appear to do nothing. See RadioDevice.EEPROM's
+		// own doc comment.
+		Device:        &config.RadioDevice{EEPROM: "0"},
 		DetectedCards: cards,
 		CTCSSTones:    standardCTCSSTones,
 		OtherNodes:    s.loadOtherNodeNumbers(n.Number),
