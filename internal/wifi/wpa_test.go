@@ -112,3 +112,61 @@ func TestParseWpaStatusDisconnected(t *testing.T) {
 		t.Errorf("parseWpaStatus() = %+v, want %+v", got, want)
 	}
 }
+
+func TestParseKnownNetworkSSIDs(t *testing.T) {
+	conf := `ctrl_interface=/run/wpa_supplicant
+ctrl_interface_group=0
+update_config=1
+
+network={
+	ssid="Starlan IoT"
+	psk=a4218bfb3c2c6a60ca9d41f364d8183eae56ba429ad3e03c9d65e4431d351c08
+}
+
+network={
+	ssid="GuestWiFi"
+	key_mgmt=NONE
+}
+
+network={
+	ssid="Starlan IoT"
+	priority=5
+}
+`
+	got := parseKnownNetworkSSIDs(conf)
+	want := []string{"Starlan IoT", "GuestWiFi"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("parseKnownNetworkSSIDs() = %v, want %v (duplicates must collapse, order preserved)", got, want)
+	}
+}
+
+func TestParseKnownNetworkSSIDsEmpty(t *testing.T) {
+	if got := parseKnownNetworkSSIDs("ctrl_interface=/run/wpa_supplicant\nupdate_config=1\n"); got != nil {
+		t.Errorf("parseKnownNetworkSSIDs() = %v, want nil for a config with no network blocks", got)
+	}
+}
+
+// TestParseWpaConfPathFromUnit is the direct regression test for a real
+// incident: `systemctl cat` on a template unit instance prints the raw
+// unit file with systemd's %I specifier still literal, so a naive
+// search for "wlan0.conf" never matches at all -- confirmed on a real
+// node, this exact same bug already broke install.sh's own config-file
+// detection once.
+func TestParseWpaConfPathFromUnit(t *testing.T) {
+	unit := "[Service]\n" +
+		"ExecStart=/usr/bin/wpa_supplicant -Dwext -c/etc/wpa_supplicant/wpa_supplicant_custom-%I.conf -i%I\n"
+	got, err := parseWpaConfPathFromUnit(unit)
+	if err != nil {
+		t.Fatalf("parseWpaConfPathFromUnit() error = %v", err)
+	}
+	want := "/etc/wpa_supplicant/wpa_supplicant_custom-wlan0.conf"
+	if got != want {
+		t.Errorf("parseWpaConfPathFromUnit() = %q, want %q", got, want)
+	}
+}
+
+func TestParseWpaConfPathFromUnitNoMatch(t *testing.T) {
+	if _, err := parseWpaConfPathFromUnit("[Service]\nExecStart=/usr/bin/true\n"); err == nil {
+		t.Error("parseWpaConfPathFromUnit() expected an error when no -c<path>.conf argument is present")
+	}
+}

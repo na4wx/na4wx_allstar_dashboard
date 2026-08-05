@@ -80,3 +80,22 @@ func TestParseNmcliStatusDisconnected(t *testing.T) {
 		t.Errorf("parseNmcliStatus() = %+v, want %+v", got, want)
 	}
 }
+
+func TestParseNmcliKnownNetworks(t *testing.T) {
+	out := "MyHomeNetwork:802-11-wireless\n" +
+		"GuestWiFi:wifi\n" +
+		"Wired connection 1:802-3-ethernet\n" +
+		nmcliHotspotConnName + ":802-11-wireless\n"
+
+	got := parseNmcliKnownNetworks(out)
+	want := []string{"MyHomeNetwork", "GuestWiFi"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("parseNmcliKnownNetworks() = %v, want %v (non-wifi and the hotspot's own profile must be excluded)", got, want)
+	}
+}
+
+func TestParseNmcliKnownNetworksEmpty(t *testing.T) {
+	if got := parseNmcliKnownNetworks("Wired connection 1:802-3-ethernet\n"); got != nil {
+		t.Errorf("parseNmcliKnownNetworks() = %v, want nil when there are no wifi profiles", got)
+	}
+}

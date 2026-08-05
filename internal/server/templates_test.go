@@ -104,6 +104,20 @@ func TestSystemPageWiFiCardRenders(t *testing.T) {
 			notWant: []string{"Scan for networks"},
 		},
 		{
+			// Coverage for the known-networks picker: while joined only
+			// via the hotspot (where Scan is refused), an operator should
+			// still be able to pick a previously-used network by name
+			// instead of retyping it from memory.
+			name: "hotspot active with known networks",
+			data: systemPageData{
+				pageData: pageData{LoggedIn: true}, WiFiAvailable: true, WiFiBackendName: "wpa_supplicant/dhcpcd", WiFiHotspotSSID: "hamvoip-gui-setup",
+				WiFiStatus:        wifi.Status{Mode: wifi.ModeHotspot, SSID: "hamvoip-gui-setup"},
+				WiFiKnownNetworks: []string{"Starlan IoT", "GuestWiFi"},
+			},
+			want:    []string{"pick a network this node has connected to before", "Starlan IoT", "GuestWiFi"},
+			notWant: []string{"Scan for networks"},
+		},
+		{
 			name: "scan results table",
 			data: systemPageData{
 				pageData: pageData{LoggedIn: true}, WiFiAvailable: true, WiFiBackendName: "NetworkManager",

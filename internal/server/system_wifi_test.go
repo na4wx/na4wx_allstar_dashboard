@@ -23,6 +23,9 @@ func (f *fakeWiFiBackend) Scan(context.Context) ([]wifi.Network, error) {
 	f.scanCalls++
 	return f.scanResult, nil
 }
+func (f *fakeWiFiBackend) ListKnownNetworks(context.Context) ([]string, error) {
+	return nil, nil
+}
 func (f *fakeWiFiBackend) Connect(context.Context, string, string) error { return nil }
 func (f *fakeWiFiBackend) Status(context.Context) (wifi.Status, error) {
 	return wifi.Status{Mode: f.mode}, nil

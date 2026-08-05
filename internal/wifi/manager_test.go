@@ -20,6 +20,9 @@ type fakeBackend struct {
 
 func (f *fakeBackend) Name() string                            { return "fake" }
 func (f *fakeBackend) Scan(context.Context) ([]Network, error) { return nil, nil }
+func (f *fakeBackend) ListKnownNetworks(context.Context) ([]string, error) {
+	return nil, nil
+}
 func (f *fakeBackend) Connect(context.Context, string, string) error {
 	f.connectCalls++
 	f.stopHotspotBeforeConnect = f.stopHotspotCalls

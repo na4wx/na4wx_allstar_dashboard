@@ -60,6 +60,16 @@ type Backend interface {
 	// page (e.g. "NetworkManager" or "wpa_supplicant/dhcpcd").
 	Name() string
 	Scan(ctx context.Context) ([]Network, error)
+	// ListKnownNetworks returns the SSIDs of networks already saved on
+	// this node (from an earlier successful Connect), independent of any
+	// live radio scan -- so it works even while the fallback hotspot is
+	// active and Scan is refused (see internal/server's own
+	// handleSystemWiFiScan doc comment for why scanning and the hotspot
+	// can't coexist). Lets an operator joined only via the hotspot pick
+	// a previously-used network by name without needing to remember or
+	// retype its exact spelling; the password still has to be re-entered
+	// since a saved passphrase is never readable back out.
+	ListKnownNetworks(ctx context.Context) ([]string, error)
 	// Connect associates wlan0 with ssid. psk == "" means an open
 	// network.
 	Connect(ctx context.Context, ssid, psk string) error
@@ -89,6 +99,9 @@ type unavailableBackend struct{}
 
 func (unavailableBackend) Name() string { return "unavailable" }
 func (unavailableBackend) Scan(context.Context) ([]Network, error) {
+	return nil, ErrUnavailable
+}
+func (unavailableBackend) ListKnownNetworks(context.Context) ([]string, error) {
 	return nil, ErrUnavailable
 }
 func (unavailableBackend) Connect(context.Context, string, string) error {

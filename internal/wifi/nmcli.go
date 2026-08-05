@@ -61,6 +61,49 @@ func (b *nmcliBackend) Scan(ctx context.Context) ([]Network, error) {
 	return parseNmcliScan(out), nil
 }
 
+// ListKnownNetworks lists NetworkManager's own saved WiFi connection
+// profiles -- unlike Scan, this only ever asks the NetworkManager
+// daemon itself (always running, independent of wlan0's own current
+// mode), so it works fine even while the fallback hotspot is active.
+func (b *nmcliBackend) ListKnownNetworks(ctx context.Context) ([]string, error) {
+	out, err := runNmcli(ctx, 5*time.Second, "-t", "-f", "NAME,TYPE", "connection", "show")
+	if err != nil {
+		return nil, err
+	}
+	return parseNmcliKnownNetworks(out), nil
+}
+
+// parseNmcliKnownNetworks is ListKnownNetworks's own logic,
+// parameterized for testability. NetworkManager reports a WiFi
+// connection profile's TYPE as "802-11-wireless" (its long-standing
+// internal name) or "wifi" (the short alias newer nmcli versions also
+// accept/report) -- both are matched since which one a given nmcli
+// version prints isn't guaranteed. This node's own fallback-hotspot
+// profile (nmcliHotspotConnName) is excluded -- it's not a "network to
+// connect to", and StopHotspot's own cleanup normally deletes it anyway.
+func parseNmcliKnownNetworks(out string) []string {
+	var names []string
+	for _, line := range strings.Split(out, "\n") {
+		line = strings.TrimRight(line, "\r")
+		if line == "" {
+			continue
+		}
+		fields := splitNmcliTerse(line)
+		if len(fields) < 2 {
+			continue
+		}
+		name, connType := fields[0], fields[1]
+		if connType != "802-11-wireless" && connType != "wifi" {
+			continue
+		}
+		if name == "" || name == nmcliHotspotConnName {
+			continue
+		}
+		names = append(names, name)
+	}
+	return names
+}
+
 // parseNmcliScan parses nmcli's terse (-t) SSID,SIGNAL,SECURITY
 // output. nmcli's terse format backslash-escapes literal ':' and '\'
 // inside field values -- a naive strings.Split(line, ":") would

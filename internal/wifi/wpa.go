@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -113,6 +115,89 @@ func (b *wpaBackend) Scan(ctx context.Context) ([]Network, error) {
 		}
 	}
 	return networks, nil
+}
+
+// ListKnownNetworks reads wpa_supplicant's own config file directly,
+// rather than going through wpa_cli -- deliberately, since this needs
+// to work even while the fallback hotspot is active, when
+// wpa_supplicant is stopped entirely (see wpa_hotspot.go's own
+// StartHotspot) and there is no running daemon for wpa_cli to reach at
+// all.
+func (b *wpaBackend) ListKnownNetworks(ctx context.Context) ([]string, error) {
+	path, err := wpaSupplicantConfPath(ctx)
+	if err != nil {
+		return nil, err
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("read %s: %w", path, err)
+	}
+	return parseKnownNetworkSSIDs(string(data)), nil
+}
+
+// wpaConfPathRe matches a -c<path>.conf argument in a systemd unit's
+// own ExecStart= line.
+var wpaConfPathRe = regexp.MustCompile(`-c(\S*\.conf)`)
+
+// wpaSupplicantConfPath discovers which config file
+// wpa_supplicant@wlan0.service is set up to use by parsing its own
+// systemd unit, the same way install.sh's own dynamic discovery does
+// (not assumed to be any particular "standard" filename, since a real
+// HamVoIP image's own copy is custom-named). `systemctl cat` works
+// regardless of whether the service is currently running, unlike asking
+// the running daemon itself -- the one thing ListKnownNetworks actually
+// needs, since it's specifically meant to work while wpa_supplicant is
+// stopped. systemd leaves a template unit's own %I specifier literal in
+// this output rather than substituting it, so that's replaced with
+// wlan0 afterward.
+func wpaSupplicantConfPath(ctx context.Context) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	var out, stderr bytes.Buffer
+	c := exec.CommandContext(ctx, "systemctl", "cat", wpaSupplicantUnit)
+	c.Stdout = &out
+	c.Stderr = &stderr
+	if err := c.Run(); err != nil {
+		return "", fmt.Errorf("systemctl cat %s: %w: %s", wpaSupplicantUnit, err, stderr.String())
+	}
+	return parseWpaConfPathFromUnit(out.String())
+}
+
+func parseWpaConfPathFromUnit(unitContent string) (string, error) {
+	m := wpaConfPathRe.FindStringSubmatch(unitContent)
+	if m == nil {
+		return "", fmt.Errorf("could not find a -c<path>.conf argument in %s's own ExecStart", wpaSupplicantUnit)
+	}
+	path := strings.NewReplacer("%i", wlan0Iface, "%I", wlan0Iface).Replace(m[1])
+	return path, nil
+}
+
+// wpaKnownSSIDRe matches an ssid="..." line inside one of
+// wpa_supplicant.conf's own network={ ... } blocks. ssid= only ever
+// appears within those blocks in wpa_supplicant's own config format, so
+// this doesn't need to track brace nesting to stay correct.
+var wpaKnownSSIDRe = regexp.MustCompile(`(?m)^\s*ssid="([^"]*)"`)
+
+// parseKnownNetworkSSIDs is ListKnownNetworks's own logic, parameterized
+// for testability -- same shape as hostapdBinary/hostapdBinaryAt.
+// Duplicate SSIDs (wpa_supplicant allows more than one network={} block
+// for the same name, e.g. one open and one secured) are collapsed to a
+// single entry, in first-seen order.
+func parseKnownNetworkSSIDs(conf string) []string {
+	var ssids []string
+	seen := map[string]bool{}
+	for _, m := range wpaKnownSSIDRe.FindAllStringSubmatch(conf, -1) {
+		ssid := m[1]
+		if ssid == "" || seen[ssid] {
+			continue
+		}
+		seen[ssid] = true
+		ssids = append(ssids, ssid)
+	}
+	return ssids
 }
 
 // parseWpaScanResults parses `wpa_cli scan_results`'s tab-separated

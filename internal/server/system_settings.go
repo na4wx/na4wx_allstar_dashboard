@@ -73,6 +73,11 @@ type systemPageData struct {
 	WiFiStatusError string
 	WiFiNetworks    []wifi.Network
 	WiFiHotspotSSID string
+	// WiFiKnownNetworks lists networks this node has connected to
+	// before, so an operator joined only via the fallback hotspot (where
+	// scanning isn't available -- see handleSystemWiFiScan) can pick one
+	// by name instead of retyping it from memory.
+	WiFiKnownNetworks []string
 }
 
 func (s *Server) handleSystemPage(w http.ResponseWriter, r *http.Request) {
@@ -172,6 +177,18 @@ func (s *Server) populateSystemWiFi(ctx context.Context, data *systemPageData) {
 		return
 	}
 	data.WiFiStatus = st
+
+	// Only fetched while the hotspot is active, since that's the one
+	// case Scan is refused and an operator has no other way to see
+	// network names this node already knows about. Best-effort: a
+	// failure here (e.g. a backend-specific quirk) just means an empty
+	// list, not a broken page -- the manual SSID/password form still
+	// works regardless.
+	if st.Mode == wifi.ModeHotspot {
+		if known, err := backend.ListKnownNetworks(ctx); err == nil {
+			data.WiFiKnownNetworks = known
+		}
+	}
 }
 
 func (s *Server) handleSystemHostname(w http.ResponseWriter, r *http.Request) {

@@ -124,6 +124,28 @@
 
   {{if eq .WiFiStatus.Mode "hotspot"}}
   <p class="hint">Scanning isn't available while broadcasting the fallback hotspot — this node's WiFi radio is busy running it, and scanning would drop your own connection to this page. Enter the network name and password directly below instead.</p>
+  {{if .WiFiKnownNetworks}}
+  <p class="hint" style="margin-top:0.75rem">Or pick a network this node has connected to before:</p>
+  <div class="table-scroll" style="margin-top:0.5rem">
+    <table>
+      <thead><tr><th>Known network</th><th></th></tr></thead>
+      <tbody>
+        {{range .WiFiKnownNetworks}}
+        <tr>
+          <td>{{.}}</td>
+          <td>
+            <form method="post" action="/system/wifi/connect" style="display:flex; gap:0.5rem; align-items:center">
+              <input type="hidden" name="ssid" value="{{.}}">
+              <input type="password" name="password" placeholder="password" style="width:9rem; min-width:0">
+              <button type="submit" class="btn">Connect</button>
+            </form>
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{end}}
   {{else}}
   <form method="post" action="/system/wifi/scan" style="margin-top:0.75rem">
     <div class="actions" style="margin-top:0">
