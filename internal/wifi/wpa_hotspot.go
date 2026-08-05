@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -24,6 +25,17 @@ const (
 	dnsmasqConfPath = "/etc/hamvoip-gui/dnsmasq-wlan0.conf"
 	hostapdPidPath  = "/run/hamvoip-gui/hostapd-wlan0.pid"
 	dnsmasqPidPath  = "/run/hamvoip-gui/dnsmasq-wlan0.pid"
+
+	// hostapdLogPath captures hostapd's own stdout/stderr. Confirmed the
+	// hard way on real hardware: hostapd's own -B flag daemonizes it,
+	// detaching it from whatever launched it -- so anything it logged
+	// after that point (including the actual reason a station gets
+	// disassociated) went nowhere and was completely unavailable for
+	// debugging a real, reproducible "phone can't join" failure.
+	// startHostapd below runs it as a plain foreground child this
+	// package manages directly instead (no -B), redirected here, fresh
+	// each start.
+	hostapdLogPath = "/var/log/hamvoip-gui/hostapd-wlan0.log"
 
 	hotspotStaticIP     = "10.42.0.1"
 	hotspotStaticCIDR   = hotspotStaticIP + "/24"
@@ -115,7 +127,7 @@ func (b *wpaBackend) StartHotspot(ctx context.Context, ssid, psk string) error {
 	if err := os.MkdirAll(filepath.Dir(hostapdPidPath), 0755); err != nil {
 		return fmt.Errorf("create %s: %w", filepath.Dir(hostapdPidPath), err)
 	}
-	if err := runCmd(ctx, 10*time.Second, hostapdBin, "-B", "-P", hostapdPidPath, hostapdConfPath); err != nil {
+	if err := startHostapd(hostapdBin); err != nil {
 		return fmt.Errorf("start hostapd: %w", err)
 	}
 	if err := runCmd(ctx, 10*time.Second, "dnsmasq", "--conf-file="+dnsmasqConfPath, "--pid-file="+dnsmasqPidPath); err != nil {
@@ -123,6 +135,58 @@ func (b *wpaBackend) StartHotspot(ctx context.Context, ssid, psk string) error {
 	}
 
 	succeeded = true
+	return nil
+}
+
+// startHostapd launches hostapd as a plain foreground child this
+// package manages directly -- not backgrounded via hostapd's own -B
+// flag, which daemonizes/detaches it and silently loses anything it
+// logs after that point (see hostapdLogPath's own doc comment). Its
+// PID is written to hostapdPidPath in the same bare-digits format
+// stopByPidfile already expects, so StopHotspot's own cleanup path
+// needs no changes.
+func startHostapd(hostapdBin string) error {
+	if err := os.MkdirAll(filepath.Dir(hostapdLogPath), 0755); err != nil {
+		return fmt.Errorf("create %s: %w", filepath.Dir(hostapdLogPath), err)
+	}
+	logFile, err := os.OpenFile(hostapdLogPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	if err != nil {
+		return fmt.Errorf("open %s: %w", hostapdLogPath, err)
+	}
+
+	// context.Background(), not StartHotspot's own request-scoped ctx --
+	// this process needs to keep running for as long as the hotspot is
+	// active, not just for the duration of the StartHotspot call that
+	// launched it.
+	cmd := exec.CommandContext(context.Background(), hostapdBin, hostapdConfPath)
+	cmd.Stdout = logFile
+	cmd.Stderr = logFile
+	if err := cmd.Start(); err != nil {
+		_ = logFile.Close()
+		return err
+	}
+
+	if err := os.WriteFile(hostapdPidPath, []byte(strconv.Itoa(cmd.Process.Pid)), 0644); err != nil {
+		_ = cmd.Process.Kill()
+		_ = logFile.Close()
+		return fmt.Errorf("write %s: %w", hostapdPidPath, err)
+	}
+
+	// Reaps the process whenever it eventually exits -- StopHotspot's
+	// own SIGTERM during a normal teardown, or a genuine crash -- so it
+	// never lingers as a zombie, and logs it either way so a real
+	// failure shows up in this app's own log immediately rather than
+	// needing someone to know to go read hostapdLogPath at all.
+	go func() {
+		waitErr := cmd.Wait()
+		_ = logFile.Close()
+		if waitErr != nil {
+			log.Printf("wifi: hostapd (pid %d) exited: %v -- see %s for details", cmd.Process.Pid, waitErr, hostapdLogPath)
+		} else {
+			log.Printf("wifi: hostapd (pid %d) exited cleanly", cmd.Process.Pid)
+		}
+	}()
+
 	return nil
 }
 
