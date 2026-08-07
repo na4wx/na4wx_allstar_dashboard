@@ -1,6 +1,6 @@
 # NA4WX Allstar Dashboard
 
-*If you are running ASL3, please see the [NA4WX Allstar ASL3 Dashboard](https://github.com/na4wx/na4wx_allstar_asl3_dashboard)*
+*If you are running ASL3, please see the [NA4WX Allstar ASL3 Dashboard](https://github.com/na4wx/na4wx_allstar_asl3_dashboard)* as this version does not support ASL3.
 
 A browser-based configuration tool for a [HamVoIP](http://hamvoip.org/) AllStarLink/Asterisk node — edit `rpt.conf`, `iax.conf`, `extensions.conf`, `usbradio.conf`/`simpleusb.conf`, and system/network settings without SSH or a text editor.
 
