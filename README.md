@@ -1,5 +1,7 @@
 # NA4WX Allstar Dashboard
 
+*If you are running ASL3, please see the [NA4WX Allstar ASL3 Dashboard](https://github.com/na4wx/na4wx_allstar_asl3_dashboard)*
+
 A browser-based configuration tool for a [HamVoIP](http://hamvoip.org/) AllStarLink/Asterisk node — edit `rpt.conf`, `iax.conf`, `extensions.conf`, `usbradio.conf`/`simpleusb.conf`, and system/network settings without SSH or a text editor.
 
 Runs as a single self-contained binary directly on the Pi. No Python/Node runtime to install, no database, no build step for the frontend.
