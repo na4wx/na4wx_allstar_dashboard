@@ -43,7 +43,7 @@ func (a *Agent) runOnce(ctx context.Context, settings Settings) (helloSucceeded 
 	}
 
 	helloCtx, cancel := context.WithTimeout(ctx, helloTimeout)
-	err = wsjson.Write(helloCtx, conn, envelope{Type: typeHello, APIKey: settings.APIKey, Nodes: nodes})
+	err = wsjson.Write(helloCtx, conn, envelope{Type: typeHello, APIKey: settings.APIKey, App: appName, Nodes: nodes})
 	cancel()
 	if err != nil {
 		logf("send hello: %v", err)

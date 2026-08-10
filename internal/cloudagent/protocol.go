@@ -14,8 +14,16 @@ type envelope struct {
 	Type string `json:"type"`
 
 	// hello (node -> cloud): the opening handshake, sent once right
-	// after the connection is established.
+	// after the connection is established. App identifies which of the
+	// two node apps sent this hello ("hamvoipconfiggui" or "asl3", see
+	// appName in run.go) -- the cloud dashboard's feature set differs
+	// between them (this app has IAX2 peer registration and standalone
+	// radio-device management that ASL3 deliberately dropped), and it
+	// has no other way to tell which one it's talking to. Omitted by an
+	// older build that predates this field; the cloud treats that the
+	// same as the newer, more limited app until this one redeploys.
 	APIKey string   `json:"apiKey,omitempty"`
+	App    string   `json:"app,omitempty"`
 	Nodes  []string `json:"nodes,omitempty"`
 
 	// helloAck (cloud -> node): the cloud's reply to hello. This isn't
@@ -69,3 +77,8 @@ const (
 
 // eventStatus is the periodic heartbeat event name (see run.go).
 const eventStatus = "status"
+
+// appName identifies this app in the hello handshake's App field -- see
+// that field's own doc comment. The ASL3 rewrite (a separate binary,
+// separate repo) sends "asl3" instead.
+const appName = "hamvoipconfiggui"
