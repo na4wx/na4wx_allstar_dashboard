@@ -80,7 +80,16 @@ func (a *Agent) runOnce(ctx context.Context, settings Settings) (helloSucceeded 
 // until ctx is cancelled (the connection ending, or Run tearing this
 // session down). Sends one immediately on connect rather than waiting a
 // full interval, so the cloud's device list shows a fresh reading right
-// away.
+// away. Also re-sends the current node list on every beat, not just at
+// hello -- confirmed the hard way that without this, the cloud's own
+// "Nodes reported by this device" list (nodeSummarySchema, populated
+// from the envelope's Nodes field) only ever reflected whatever nodes
+// existed at the moment this connection was first established, going
+// stale the instant an operator added/renamed a node locally without
+// this process itself restarting (which is the common case -- editing
+// rpt.conf through the local dashboard doesn't restart this process).
+// The cloud's own device list page was already unaffected, since it
+// relays config.listNodes live rather than reading this cached copy.
 func (a *Agent) heartbeatLoop(ctx context.Context, conn *websocket.Conn) {
 	ticker := time.NewTicker(heartbeatInterval)
 	defer ticker.Stop()
@@ -94,9 +103,14 @@ func (a *Agent) heartbeatLoop(ctx context.Context, conn *websocket.Conn) {
 		if err != nil {
 			return
 		}
+		// Best-effort: a failure here just means this particular beat
+		// doesn't refresh the cloud's own node list -- the status update
+		// itself still goes out, and the next beat (or the next fresh
+		// hello) tries again.
+		nodes, _ := a.store.ListNodes()
 		writeCtx, cancel := context.WithTimeout(ctx, helloTimeout)
 		defer cancel()
-		if err := wsjson.Write(writeCtx, conn, envelope{Type: typeEvent, Event: eventStatus, Data: data}); err != nil {
+		if err := wsjson.Write(writeCtx, conn, envelope{Type: typeEvent, Event: eventStatus, Data: data, Nodes: nodes}); err != nil {
 			return
 		}
 	}
